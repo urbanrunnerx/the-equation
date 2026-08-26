@@ -7,6 +7,7 @@
   var lastPaint = 0;
   var canvas, ctx;
   var prestigeArmed = false;
+  var rewriteArmed = false;
 
   function $(id) { return document.getElementById(id); }
 
@@ -29,6 +30,9 @@
       if (e.type === "unlock") toast("Unlocked <b>" + e.text.replace("Variable ", "").replace(" entered the equation.", "") + "</b> — " + e.text);
       else if (e.type === "milestone") toast("<b>Milestone.</b> " + e.text);
       else if (e.type === "prestige") toast("<b>Prestige.</b> " + e.text, 5000);
+      else if (e.type === "rewrite") toast("<b>Rewrite.</b> " + e.text, 5500);
+      else if (e.type === "star") toast("<b>★</b> " + e.text, 4500);
+      else if (e.type === "publish") toast("<b>Published.</b> " + e.text, 5000);
       else if (e.type === "up") toast(e.text);
       else if (e.type === "reset") toast(e.text);
     }
@@ -55,7 +59,12 @@
 
   function formulaMain() {
     var ids = activeIds();
-    var exp = ["<i>b</i>"].concat(ids.map(function (id) { return "<i>" + id + "</i>"; })).concat(["d<i>t</i>"]).join("·");
+    var head = ["<i>b</i>"];
+    if (game.showPhi()) head.push("<i>φ</i>");
+    if (game.showTau()) head.push("<i>τ</i>");
+    var exp = head.concat(ids.map(function (id) {
+      return "<i>" + Game.VAR_DEFS[id].name + "</i>";
+    })).concat(["d<i>t</i>"]).join("·");
     return "<i>f</i>(<i>t</i>+d<i>t</i>) = <i>f</i>(<i>t</i>)·<i>e</i><sup>" + exp + "</sup>";
   }
 
@@ -63,6 +72,8 @@
     var ids = activeIds();
     var f = formatLog(game.s.fLog);
     var parts = [formatJS(game.s.b, 3)];
+    if (game.showPhi()) parts.push(formatJS(game.phi(), 3));
+    if (game.showTau()) parts.push(formatJS(game.tau(), 3));
     ids.forEach(function (id) { parts.push(formatJS(game.varValue(id), 2)); });
     parts.push(formatJS(game.dtSpeed(), 3));
     return f + " · e<sup>" + parts.join(" · ") + "</sup>";
@@ -72,7 +83,7 @@
   function varRow(id, compact) {
     var def = Game.VAR_DEFS[id];
     var unlocked = game.isUnlocked(id);
-    var lv = game.s.vars[id];
+    var lv = game.s.vars[id] || 0;
     var val = game.varValue(id);
     var cost = game.costLog(id);
     var can = game.canBuy(id);
@@ -80,17 +91,21 @@
     var locked = !unlocked;
     var why = "";
     if (locked) {
-      why = "Unlocks at f(t) ≥ " + formatLog(def.unlockLog);
+      if (def.starGate && !(game.s.starShop && game.s.starShop[def.starGate] > 0)) {
+        why = "Purchase in the Stars shop";
+      } else {
+        why = "Unlocks at f(t) ≥ " + formatLog(def.unlockLog);
+      }
     }
     var hover = game.hovered === id ? " hovered" : "";
     var html = '<div class="var-row' + (locked ? " locked" : "") + hover + '" data-id="' + id + '">';
-    html += '<div class="var-name">' + id + "</div>";
+    html += '<div class="var-name">' + def.name + "</div>";
     html += '<div class="var-info">';
     if (locked) {
       html += '<div class="val">' + why + "</div>";
       html += '<div class="eff">' + def.blurb + "</div>";
     } else {
-      html += '<div class="val">' + id + " = " + formatJS(val, 2) + " <span style='color:var(--ink-mute)'>lv " + lv + "</span></div>";
+      html += '<div class="val">' + def.name + " = " + formatJS(val, 2) + " <span style='color:var(--ink-mute)'>lv " + lv + "</span></div>";
       html += '<div class="eff">×' + formatJS(val, 2) + " on the exponent";
       if (!compact) html += " · next ×2-style bump in " + nextMs + " buys";
       html += "</div>";
@@ -168,7 +183,7 @@
   }
 
   function renderMuUp() {
-    if (game.s.prestiges < 1) {
+    if (game.s.prestiges < 1 && game.s.rewrites < 1) {
       $("mu-upgrades").innerHTML = '<p style="color:var(--ink-mute);font-size:13px">Complete a prestige to unlock lemmas bought with μ.</p>';
       return;
     }
@@ -195,13 +210,17 @@
   function renderStats() {
     var s = game.s;
     var cells = [
-      ["f(t)", formatLog(s.fLog)],
+      ["f(t)", s.fLayer ? formatNum(new Num(s.fLog, s.fLayer)) : formatLog(s.fLog)],
       ["t this run", formatTime(s.t)],
       ["b", formatJS(s.b, 3)],
       ["μ (spendable)", formatJS(s.mu, 2)],
+      ["φ", formatJS(game.phi(), 3)],
+      ["τ", formatJS(game.tau(), 3)],
+      ["Stars", String(s.stars) + " / " + String(s.starsTotal || 0) + " earned"],
       ["Max f (lifetime)", s.maxFLayer > 0 ? formatNum(new Num(s.maxFLog, s.maxFLayer)) : formatLog(s.maxFLog)],
       ["Max f this run", formatLog(s.runMaxFLog)],
       ["Prestiges", String(s.prestiges)],
+      ["Rewrites", String(s.rewrites || 0)],
       ["Lifetime μ", formatJS(s.lifetimeMu, 2)],
       ["Play time", formatTime(s.playTime)],
       ["Run time", formatTime(s.runTime)],
@@ -213,10 +232,19 @@
     }).join("");
   }
 
-  /* ----- prestige panel ----- */
+  /* ----- prestige / rewrite panel ----- */
   function prestigeProgress() {
     var L = game._prestigeLog();
     return Math.max(0, Math.min(1, L / 24));
+  }
+
+  function rewriteProgress() {
+    if (game.canRewrite()) return 1;
+    if (!game.rewriteUnlocked()) {
+      return Math.max(0, Math.min(0.85, game.s.prestiges / 3 * 0.7 + Math.max(0, (game.s.b - 1) / 2.6) * 0.3));
+    }
+    var d = game.dphi();
+    return Math.max(0, Math.min(1, d / 0.45));
   }
 
   function renderPrestige() {
@@ -237,6 +265,141 @@
       $("p-hint").textContent = "Δb is meaningful. Later runs: wait until (b+Δb)/b feels slow to grow.";
     }
     renderMuUp();
+    renderRewrite();
+  }
+
+  function renderRewrite() {
+    var dphi = game.dphi();
+    var can = game.canRewrite();
+    $("dphi-val").textContent = dphi > 0 ? "+" + formatJS(dphi, 3) : "—";
+    $("phi-after").textContent = formatJS(game.phi() + dphi, 3);
+    $("rewrite-count").textContent = String(game.s.rewrites || 0);
+    $("r-bar").style.width = (rewriteProgress() * 100).toFixed(1) + "%";
+    $("btn-rewrite").disabled = !can;
+    if (!game.rewriteUnlocked()) {
+      $("r-hint").textContent = "Unlocks after 3 prestiges and b ≥ 2.6. Currently " +
+        game.s.prestiges + " prestige" + (game.s.prestiges === 1 ? "" : "s") + ", b = " + formatJS(game.s.b, 3) + ".";
+    } else if (!can) {
+      $("r-hint").textContent = "Raise b a little further. Δφ opens around 0.45 (now " + formatJS(dphi, 3) + ").";
+    } else {
+      $("r-hint").textContent = "Rewriting returns b to 1 and adds φ. Autobuy and μ lemmas stay. Theories open after the first rewrite.";
+    }
+  }
+
+  /* ----- stars ----- */
+  function renderStars() {
+    var s = game.s;
+    $("star-have").textContent = String(s.stars || 0);
+    $("star-total").textContent = String(s.starsTotal || 0);
+    var achHtml = "";
+    Game.ACHIEVEMENTS.forEach(function (a) {
+      var done = !!(s.achievements && s.achievements[a.id]);
+      achHtml += '<div class="ach-row' + (done ? " done" : "") + '">';
+      achHtml += '<div><div class="val">' + a.name + '</div><div class="eff">' + a.desc + "</div></div>";
+      achHtml += '<div class="stars">' + (done ? "got " : "") + a.stars + " ★</div>";
+      achHtml += "</div>";
+    });
+    $("ach-list").innerHTML = achHtml;
+
+    var shopHtml = "";
+    Game.STAR_SHOP.forEach(function (item) {
+      var lv = (s.starShop && s.starShop[item.id]) || 0;
+      var cost = game.starShopCost(item.id);
+      var maxed = lv >= item.max;
+      var can = !maxed && s.stars >= cost;
+      var label = item.max > 1 ? (item.name + "  " + lv + " / " + item.max) : item.name;
+      shopHtml += '<div class="up-row">';
+      shopHtml += '<div class="var-name" style="font-size:16px;font-style:normal;font-family:var(--sans)">★</div>';
+      shopHtml += '<div class="var-info"><div class="val">' + label + '</div><div class="eff">' + item.desc;
+      if (item.id === "prodMult") shopHtml += "  ·  ×" + formatJS(game.starMult(), 2);
+      shopHtml += "</div></div>";
+      shopHtml += '<div class="var-cost"><span class="n">' + (maxed ? "max" : String(cost)) + "</span>stars</div>";
+      shopHtml += "<span></span>";
+      shopHtml += '<button class="btn primary" data-star="' + item.id + '"' + (can ? "" : " disabled") + ">Buy</button>";
+      shopHtml += "</div>";
+    });
+    $("star-shop").innerHTML = shopHtml;
+
+    var apOn = !!(s.starShop && s.starShop.autoPrestige > 0);
+    $("auto-p-wrap").hidden = !apOn;
+    if (apOn) {
+      $("auto-prestige").checked = !!s.autoPrestige;
+      $("auto-p-thr").value = String(s.autoPrestigeThreshold || 1);
+    }
+  }
+
+  /* ----- theories ----- */
+  function thUpRow(tid, which, name, desc, costLabel) {
+    var cost = game.theoryCost(tid, which);
+    var can = game.canBuyTheory(tid, which);
+    var lv = game.s.theories[tid][which];
+    var html = '<div class="up-row">';
+    html += '<div class="var-name" style="font-size:18px">' + name + "</div>";
+    html += '<div class="var-info"><div class="val">' + desc + " <span style='color:var(--ink-mute)'>lv " + lv + "</span></div>";
+    html += '<div class="eff">cost ' + formatJS(cost, 2) + " " + costLabel + "</div></div>";
+    html += '<div class="var-cost"><span class="n">' + formatJS(cost, 2) + "</span>" + costLabel + "</div>";
+    html += "<span></span>";
+    html += '<button class="btn primary" data-thbuy="' + tid + '" data-which="' + which + '"' + (can ? "" : " disabled") + ">Buy</button>";
+    html += "</div>";
+    return html;
+  }
+
+  function renderTheories(force) {
+    var open = game.theoriesUnlocked();
+    $("theories-locked").hidden = open;
+    $("theories-open").hidden = !open;
+    var tabBtn = $("tab-theories");
+    if (tabBtn) tabBtn.classList.toggle("dim", !open);
+    if (!open) return;
+
+    var th = game.s.theories;
+    var rec = th.recurrence;
+    var du = th.dual;
+    var active = th.active || "recurrence";
+    $("tau-big").textContent = formatJS(game.tau(), 3);
+
+    $("th-card-recurrence").classList.toggle("is-active", active === "recurrence");
+    $("th-card-dual").classList.toggle("is-active", active === "dual");
+    $("btn-act-recurrence").textContent = active === "recurrence" ? "Active" : "Set active";
+    $("btn-act-dual").textContent = active === "dual" ? "Active" : "Set active";
+    $("btn-act-recurrence").disabled = active === "recurrence";
+    $("btn-act-dual").disabled = active === "dual";
+
+    $("th-rho").textContent = formatJS(rec.rho, 2);
+    $("th-maxrho").textContent = formatJS(rec.maxRho, 2);
+    $("th-tau1").textContent = formatJS(rec.tau, 3);
+    $("th-rate1").textContent = formatJS(game.theoryRate("recurrence"), 2);
+
+    $("th-lam").textContent = formatJS(du.lambda, 2);
+    $("th-sig").textContent = formatJS(du.sigma, 2);
+    $("th-tau2").textContent = formatJS(du.tau, 3);
+    $("th-rate2").textContent = formatJS(game.theoryRate("dual").sigma, 2);
+
+    var can1 = game.canPublish("recurrence");
+    var can2 = game.canPublish("dual");
+    $("btn-pub-recurrence").disabled = !can1;
+    $("btn-pub-dual").disabled = !can2;
+    var g1 = game.theoryPubValue("recurrence");
+    var g2 = game.theoryPubValue("dual");
+    $("th-pub-recurrence").textContent = can1
+      ? ("Publish resets ρ and cᵢ. Next τ₁ ≈ " + formatJS(rec.tau > 0 ? rec.tau * (1 + 0.28 * g1) : g1, 3) + ".")
+      : "Publish after max ρ ≥ 80 (currently " + formatJS(rec.maxRho, 2) + ").";
+    $("th-pub-dual").textContent = can2
+      ? ("Publish resets λ, σ and aᵢ. Next τ₂ ≈ " + formatJS(du.tau > 0 ? du.tau * (1 + 0.28 * g2) : g2, 3) + ".")
+      : "Publish after max σ ≥ 45 (currently " + formatJS(du.maxSigma, 2) + ").";
+
+    if (force) {
+      $("th-up-recurrence").innerHTML =
+        thUpRow("recurrence", "c1", "c₁", "Adds to the recurrence step", "ρ") +
+        thUpRow("recurrence", "c2", "c₂", "Second factor in the step", "ρ") +
+        thUpRow("recurrence", "c3", "c₃", "1.28^{c₃} on the step", "ρ") +
+        thUpRow("recurrence", "c4", "c₄", "Linear boost to the step", "ρ");
+      $("th-up-dual").innerHTML =
+        thUpRow("dual", "a1", "a₁", "λ production (costs λ)", "λ") +
+        thUpRow("dual", "a2", "a₂", "1.28^{a₂} on λ (costs λ)", "λ") +
+        thUpRow("dual", "a3", "a₃", "σ conversion from λ (costs σ)", "σ") +
+        thUpRow("dual", "a4", "a₄", "1.22^{a₄} on σ (costs σ)", "σ");
+    }
   }
 
   /* ----- graph ----- */
@@ -317,25 +480,47 @@
     $("top-b").textContent = formatJS(s.b, 3);
     $("top-mu").textContent = formatJS(s.mu, 2);
     $("top-dt").textContent = formatJS(game.dtSpeed(), 3);
+    $("top-phi").textContent = formatJS(game.phi(), 3);
+    $("top-tau").textContent = formatJS(game.tau(), 3);
+    $("top-stars").textContent = String(s.stars || 0);
+    $("cur-phi").hidden = !game.showPhi();
+    $("cur-tau").hidden = !game.showTau();
+    $("cur-stars").hidden = !game.showStars();
 
     $("f-value").textContent = s.fLayer ? formatNum(new Num(s.fLog, s.fLayer)) : formatLog(s.fLog);
     $("growth").textContent = "+" + formatJS(game.growthRate(), 2) + " decades / s";
     $("t-value").textContent = formatTime(s.t);
     $("b-value").textContent = formatJS(s.b, 3);
     $("mu-value").textContent = formatJS(s.mu, 2);
+    $("phi-value").textContent = formatJS(game.phi(), 3);
+    $("tau-value").textContent = formatJS(game.tau(), 3);
+    $("meta-phi").hidden = !game.showPhi();
+    $("meta-tau").hidden = !game.showTau();
     $("formula-main").innerHTML = formulaMain();
     $("formula-sub").innerHTML = formulaSub();
     $("foot-rate").textContent = "d(log₁₀ f)/dt = " + formatJS(game.growthRate(), 3);
 
     $("btn-prestige-mini").disabled = !game.canPrestige();
-    $("autobuy-wrap").hidden = s.prestiges < 1;
+    $("autobuy-wrap").hidden = !game.autobuyAvailable();
     $("autobuy").checked = !!s.autobuy;
+
+    var pending = game.starGatedPending();
+    var hint = $("var-star-hint");
+    if (pending.length) {
+      var names = pending.map(function (id) { return Game.VAR_DEFS[id].name; }).join(", ");
+      hint.hidden = false;
+      hint.textContent = "Later variables (" + names + ") are admitted from the Stars shop, then still need high f this run.";
+    } else {
+      hint.hidden = true;
+    }
 
     if (force) {
       renderVars($("eq-vars"), true);
       renderVars($("var-table"), false);
       renderUpgrades();
       renderPrestige();
+      renderStars();
+      renderTheories(true);
       renderStats();
     } else {
       // Refresh affordance on a slower cadence so buttons do not jitter.
@@ -347,11 +532,18 @@
         if (tab === "variables") renderVars($("var-table"), false);
         if (tab === "upgrades") renderUpgrades();
         if (tab === "prestige") renderPrestige();
+        if (tab === "stars") renderStars();
+        if (tab === "theories") renderTheories(true);
         if (tab === "stats") renderStats();
       } else if (tab === "prestige") {
         $("db-val").textContent = game.canPrestige() || game.db() > 0 ? "+" + formatJS(game.db(), 3) : "—";
         $("p-bar").style.width = (prestigeProgress() * 100).toFixed(1) + "%";
         $("btn-prestige").disabled = !game.canPrestige();
+        $("dphi-val").textContent = game.dphi() > 0 ? "+" + formatJS(game.dphi(), 3) : "—";
+        $("r-bar").style.width = (rewriteProgress() * 100).toFixed(1) + "%";
+        $("btn-rewrite").disabled = !game.canRewrite();
+      } else if (tab === "theories" && game.theoriesUnlocked()) {
+        renderTheories(false);
       }
     }
 
@@ -389,6 +581,45 @@
     save(false);
   });
 
+  $("star-shop").addEventListener("click", function (ev) {
+    var t = ev.target.closest("[data-star]");
+    if (!t) return;
+    if (game.buyStarShop(t.getAttribute("data-star"))) {
+      paint(true); save(true);
+    }
+  });
+  $("auto-prestige").addEventListener("change", function () {
+    game.s.autoPrestige = $("auto-prestige").checked;
+    save(false);
+  });
+  $("auto-p-thr").addEventListener("change", function () {
+    var n = parseFloat($("auto-p-thr").value);
+    if (isFinite(n) && n > 0) game.s.autoPrestigeThreshold = n;
+    save(false);
+  });
+
+  $("panel-theories").addEventListener("click", function (ev) {
+    var act = ev.target.closest("[data-activate]");
+    if (act) {
+      game.setActiveTheory(act.getAttribute("data-activate"));
+      paint(true); save(false);
+      return;
+    }
+    var buy = ev.target.closest("[data-thbuy]");
+    if (buy) {
+      if (game.buyTheory(buy.getAttribute("data-thbuy"), buy.getAttribute("data-which"))) {
+        paint(true); save(false);
+      }
+      return;
+    }
+  });
+  $("btn-pub-recurrence").addEventListener("click", function () {
+    if (game.publishTheory("recurrence")) { paint(true); save(true); }
+  });
+  $("btn-pub-dual").addEventListener("click", function () {
+    if (game.publishTheory("dual")) { paint(true); save(true); }
+  });
+
   function openPrestigeModal() {
     if (!game.canPrestige()) return;
     $("m-db").textContent = "+" + formatJS(game.db(), 3);
@@ -404,6 +635,20 @@
       paint(true);
     }
   }
+  function openRewriteModal() {
+    if (!game.canRewrite()) return;
+    $("m-dphi").textContent = "+" + formatJS(game.dphi(), 3);
+    $("modal-rewrite").classList.add("open");
+    rewriteArmed = true;
+  }
+  function doRewrite() {
+    $("modal-rewrite").classList.remove("open");
+    rewriteArmed = false;
+    if (game.rewrite()) {
+      save(true);
+      paint(true);
+    }
+  }
   $("btn-prestige").addEventListener("click", openPrestigeModal);
   $("btn-prestige-mini").addEventListener("click", openPrestigeModal);
   $("m-cancel").addEventListener("click", function () {
@@ -411,6 +656,12 @@
     prestigeArmed = false;
   });
   $("m-go").addEventListener("click", doPrestige);
+  $("btn-rewrite").addEventListener("click", openRewriteModal);
+  $("rw-cancel").addEventListener("click", function () {
+    $("modal-rewrite").classList.remove("open");
+    rewriteArmed = false;
+  });
+  $("rw-go").addEventListener("click", doRewrite);
 
   $("btn-export").addEventListener("click", function () {
     var json = game.serialize();
@@ -451,11 +702,16 @@
     } else if (k === "p" || k === "P") {
       if (prestigeArmed) doPrestige();
       else openPrestigeModal();
+    } else if (k === "r" || k === "R") {
+      if (rewriteArmed) doRewrite();
+      else openRewriteModal();
     } else if (k === "1") document.querySelector("[data-tab=equation]").click();
     else if (k === "2") document.querySelector("[data-tab=variables]").click();
     else if (k === "3") document.querySelector("[data-tab=upgrades]").click();
     else if (k === "4") document.querySelector("[data-tab=prestige]").click();
-    else if (k === "5") document.querySelector("[data-tab=stats]").click();
+    else if (k === "5") document.querySelector("[data-tab=stars]").click();
+    else if (k === "6") document.querySelector("[data-tab=theories]").click();
+    else if (k === "7") document.querySelector("[data-tab=stats]").click();
   });
 
   /* ----- save ----- */

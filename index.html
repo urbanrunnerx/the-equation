@@ -14,6 +14,9 @@
         <div class="cur"><span class="k">t</span><span class="v" id="top-t">0.00</span></div>
         <div class="cur"><span class="k">b</span><span class="v" id="top-b">1.00</span></div>
         <div class="cur"><span class="k">μ</span><span class="v" id="top-mu">0</span></div>
+        <div class="cur" id="cur-phi" hidden><span class="k">φ</span><span class="v" id="top-phi">1.00</span></div>
+        <div class="cur" id="cur-tau" hidden><span class="k">τ</span><span class="v" id="top-tau">1.00</span></div>
+        <div class="cur" id="cur-stars" hidden><span class="k">★</span><span class="v" id="top-stars">0</span></div>
         <div class="cur"><span class="k">dt</span><span class="v" id="top-dt">0.075</span></div>
       </div>
     </header>
@@ -23,9 +26,11 @@
       <button data-tab="variables">Variables</button>
       <button data-tab="upgrades">Upgrades</button>
       <button data-tab="prestige">Prestige</button>
+      <button data-tab="stars">Stars</button>
+      <button data-tab="theories" id="tab-theories">Theories</button>
       <button data-tab="stats">Stats</button>
       <span class="spacer"></span>
-      <span class="hint-keys"><span class="kbd">M</span> buy max &nbsp; <span class="kbd">P</span> prestige</span>
+      <span class="hint-keys"><span class="kbd">M</span> buy max &nbsp; <span class="kbd">P</span> prestige &nbsp; <span class="kbd">R</span> rewrite</span>
     </nav>
 
     <main class="main">
@@ -44,6 +49,8 @@
               <span>t = <b id="t-value">0.00</b></span>
               <span>b = <b id="b-value">1.00</b></span>
               <span>μ = <b id="mu-value">0</b></span>
+              <span id="meta-phi" hidden>φ = <b id="phi-value">1.00</b></span>
+              <span id="meta-tau" hidden>τ = <b id="tau-value">1.00</b></span>
             </div>
             <div class="actions">
               <button class="btn" id="btn-advance" title="Spend ~10% of f(t) to push t forward">Advance t</button>
@@ -72,6 +79,7 @@
             </label>
           </div>
           <div id="var-table"></div>
+          <p class="board-note" id="var-star-hint" hidden></p>
         </div>
       </section>
 
@@ -106,8 +114,105 @@
           </div>
           <div class="formula-card p-card">
             <h2>μ lemmas</h2>
-            <p>Permanent. Unlocked after the first prestige. Spent from the μ pool.</p>
+            <p>Permanent. Unlocked after the first prestige. Spent from the μ pool. Survive Rewrite.</p>
             <div id="mu-upgrades"></div>
+          </div>
+          <div class="formula-card p-card span2" id="rewrite-card">
+            <h2>Rewrite</h2>
+            <p id="rewrite-blurb">A second change of paper. Resets t, f, variables, f-upgrades, and <i>b</i> (returns to 1). μ lemmas, stars, theories, and φ remain. φ multiplies the exponent.</p>
+            <div class="p-stats" id="rewrite-stats">
+              <div class="p-stat"><div class="k">Δφ</div><div class="v" id="dphi-val">—</div></div>
+              <div class="p-stat"><div class="k">φ after</div><div class="v" id="phi-after">1.00</div></div>
+              <div class="p-stat"><div class="k">b after</div><div class="v">1.00</div></div>
+              <div class="p-stat"><div class="k">Rewrites</div><div class="v" id="rewrite-count">0</div></div>
+            </div>
+            <div class="progress" title="Progress toward Rewrite"><span id="r-bar"></span></div>
+            <p id="r-hint" style="margin-top:-8px;font-size:12px;color:var(--ink-mute)"></p>
+            <button class="btn primary wide" id="btn-rewrite" disabled>Rewrite</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STARS -->
+      <section class="panel" id="panel-stars">
+        <div class="stars-wrap">
+          <div class="board">
+            <div class="board-head">
+              <div>
+                <h2>Milestones</h2>
+                <p>Stars are granted once, from achievements — not from clicking. They persist through prestige and rewrite.</p>
+              </div>
+              <div class="star-balance">★ <span id="star-have">0</span> <small>/ <span id="star-total">0</span> earned</small></div>
+            </div>
+            <div id="ach-list"></div>
+          </div>
+          <div class="board">
+            <div class="board-head">
+              <div>
+                <h2>Star shop</h2>
+                <p>Spend stars on quality-of-life and later variables.</p>
+              </div>
+            </div>
+            <div id="star-shop"></div>
+            <div id="auto-p-wrap" class="auto-p-wrap" hidden>
+              <label class="toggle">
+                <input type="checkbox" id="auto-prestige" /> Auto-prestige
+              </label>
+              <label class="thr-lab">when Δb ≥
+                <input type="number" id="auto-p-thr" min="0.2" max="50" step="0.1" value="1" />
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- THEORIES -->
+      <section class="panel" id="panel-theories">
+        <div id="theories-locked" class="formula-card p-card">
+          <h2>Theory workshop</h2>
+          <p>Rewrite the equation once to open a side-desk of smaller equations. Each theory produces its own τₙ; the main exponent is multiplied by τ = Π(1 + τₙ).</p>
+        </div>
+        <div id="theories-open" hidden>
+          <div class="board-head theory-head">
+            <div>
+              <h2>Theories</h2>
+              <p>Only the active theory ticks. Publish resets that theory and raises its τₙ. Main τ = (1+τ₁)(1+τ₂).</p>
+            </div>
+            <div class="tau-readout">τ = <b id="tau-big">1.00</b></div>
+          </div>
+          <div class="theory-wrap">
+            <div class="formula-card p-card theory-card" id="th-card-recurrence" data-tid="recurrence">
+              <div class="th-top">
+                <h2>Recurrence</h2>
+                <button class="btn" data-activate="recurrence" id="btn-act-recurrence">Active</button>
+              </div>
+              <p class="th-eq">ρ<sub>n+1</sub> = ρ<sub>n</sub> + c<sub>1</sub>·c<sub>2</sub>·1.28<sup>c<sub>3</sub></sup></p>
+              <div class="p-stats th-stats">
+                <div class="p-stat"><div class="k">ρ</div><div class="v" id="th-rho">0</div></div>
+                <div class="p-stat"><div class="k">max ρ</div><div class="v" id="th-maxrho">0</div></div>
+                <div class="p-stat"><div class="k">τ₁</div><div class="v" id="th-tau1">0</div></div>
+                <div class="p-stat"><div class="k">rate</div><div class="v" id="th-rate1">0</div></div>
+              </div>
+              <div id="th-up-recurrence"></div>
+              <button class="btn primary wide" id="btn-pub-recurrence" disabled>Publish</button>
+              <p class="th-pub" id="th-pub-recurrence"></p>
+            </div>
+            <div class="formula-card p-card theory-card" id="th-card-dual" data-tid="dual">
+              <div class="th-top">
+                <h2>Coupled rates</h2>
+                <button class="btn" data-activate="dual" id="btn-act-dual">Set active</button>
+              </div>
+              <p class="th-eq">dλ/dt = a<sub>1</sub>·1.28<sup>a<sub>2</sub></sup> &nbsp; · &nbsp; dσ/dt ∝ λ·a<sub>3</sub></p>
+              <div class="p-stats th-stats">
+                <div class="p-stat"><div class="k">λ</div><div class="v" id="th-lam">0</div></div>
+                <div class="p-stat"><div class="k">σ</div><div class="v" id="th-sig">0</div></div>
+                <div class="p-stat"><div class="k">τ₂</div><div class="v" id="th-tau2">0</div></div>
+                <div class="p-stat"><div class="k">dσ/dt</div><div class="v" id="th-rate2">0</div></div>
+              </div>
+              <div id="th-up-dual"></div>
+              <button class="btn primary wide" id="btn-pub-dual" disabled>Publish</button>
+              <p class="th-pub" id="th-pub-dual"></p>
+            </div>
           </div>
         </div>
       </section>
@@ -144,10 +249,22 @@
     </div>
   </div>
 
+  <div class="modal" id="modal-rewrite">
+    <div class="modal-card">
+      <h2>Rewrite</h2>
+      <p>Begin again with a new coefficient. You will gain <b id="m-dphi"></b> to <i>φ</i>. <i>b</i> returns to 1.</p>
+      <p style="margin-top:8px">t, f(t), variables, and f-upgrades reset. μ lemmas, stars, and theories remain.</p>
+      <div class="modal-actions">
+        <button class="btn" id="rw-cancel">Remain</button>
+        <button class="btn primary" id="rw-go">Rewrite</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="modal-reset">
     <div class="modal-card">
       <h2>Hard reset</h2>
-      <p>Erase all progress, including b, μ, and lifetime stats. This cannot be undone.</p>
+      <p>Erase all progress, including b, μ, φ, stars, theories, and lifetime stats. This cannot be undone.</p>
       <div class="modal-actions">
         <button class="btn" id="r-cancel">Cancel</button>
         <button class="btn danger" id="r-go">Erase everything</button>
