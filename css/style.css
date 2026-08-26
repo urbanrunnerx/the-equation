@@ -265,6 +265,7 @@ button:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
 }
 
 .f-block { text-align: center; position: relative; }
+.f-readout { position: relative; display: inline-block; }
 .f-label {
   display: block;
   font-size: 11px;
@@ -732,9 +733,9 @@ textarea#save-box {
 
 .decade-float {
   position: absolute;
-  left: 50%;
-  top: 22px;
-  transform: translateX(-50%);
+  left: 100%;
+  top: 50%;
+  transform: translate(8px, -50%);
   color: var(--gold);
   font-family: var(--serif);
   font-style: italic;
@@ -747,11 +748,10 @@ textarea#save-box {
 .decade-float.drop {
   color: var(--ink-mute);
   opacity: 0.7;
-  top: 48px;
 }
 @keyframes decade-float {
-  0% { opacity: 0.95; transform: translateX(-50%) translateY(4px); }
-  100% { opacity: 0; transform: translateX(-50%) translateY(-16px); }
+  0% { opacity: 0.95; transform: translate(8px, -40%); }
+  100% { opacity: 0; transform: translate(8px, -95%); }
 }
 
 .formula-main [data-term].write-in,
