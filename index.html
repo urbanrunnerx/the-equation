@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Equation</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="brand">The Equation <small>a growing function</small></div>
+      <div class="currencies">
+        <div class="cur"><span class="k">t</span><span class="v" id="top-t">0.00</span></div>
+        <div class="cur"><span class="k">b</span><span class="v" id="top-b">1.00</span></div>
+        <div class="cur"><span class="k">μ</span><span class="v" id="top-mu">0</span></div>
+        <div class="cur"><span class="k">dt</span><span class="v" id="top-dt">0.075</span></div>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="equation" class="active">Equation</button>
+      <button data-tab="variables">Variables</button>
+      <button data-tab="upgrades">Upgrades</button>
+      <button data-tab="prestige">Prestige</button>
+      <button data-tab="stats">Stats</button>
+      <span class="spacer"></span>
+      <span class="hint-keys"><span class="kbd">M</span> buy max &nbsp; <span class="kbd">P</span> prestige</span>
+    </nav>
+
+    <main class="main">
+      <!-- EQUATION -->
+      <section class="panel active" id="panel-equation">
+        <div class="hero">
+          <div class="formula-card">
+            <div class="formula-main" id="formula-main"></div>
+            <div class="formula-sub" id="formula-sub"></div>
+            <div class="f-block">
+              <span class="f-label">f(t)</span>
+              <div class="f-value" id="f-value">1.00</div>
+              <div class="growth" id="growth">+0.00 decades / s</div>
+            </div>
+            <div class="meta-row">
+              <span>t = <b id="t-value">0.00</b></span>
+              <span>b = <b id="b-value">1.00</b></span>
+              <span>μ = <b id="mu-value">0</b></span>
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-advance" title="Spend ~10% of f(t) to push t forward">Advance t</button>
+              <button class="btn primary" id="btn-prestige-mini" disabled>Prestige</button>
+            </div>
+            <p class="ee-help">Notation: 1.23e9 = 1.23×10<sup>9</sup>. &nbsp; ee3 = 10<sup>10<sup>3</sup></sup> = 10<sup>1000</sup>.</p>
+          </div>
+          <div class="graph-card">
+            <h3>log<sub>10</sub> f &nbsp; vs &nbsp; t &nbsp; · &nbsp; this run</h3>
+            <canvas id="graph" width="640" height="280"></canvas>
+          </div>
+        </div>
+        <div class="eq-vars board" id="eq-vars"></div>
+      </section>
+
+      <!-- VARIABLES -->
+      <section class="panel" id="panel-variables">
+        <div class="board">
+          <div class="board-head">
+            <div>
+              <h2>Variables</h2>
+              <p>Each purchase divides f(t) by the cost, then growth continues from the new f.</p>
+            </div>
+            <label class="toggle" id="autobuy-wrap" hidden>
+              <input type="checkbox" id="autobuy" /> Autobuy
+            </label>
+          </div>
+          <div id="var-table"></div>
+        </div>
+      </section>
+
+      <!-- UPGRADES -->
+      <section class="panel" id="panel-upgrades">
+        <div class="board">
+          <div class="board-head">
+            <div>
+              <h2>Upgrades</h2>
+              <p>Bought with f(t). Time is the engine — there is nothing you must click.</p>
+            </div>
+          </div>
+          <div id="upgrade-table"></div>
+        </div>
+      </section>
+
+      <!-- PRESTIGE -->
+      <section class="panel" id="panel-prestige">
+        <div class="prestige-wrap">
+          <div class="formula-card p-card">
+            <h2>Change of base</h2>
+            <p>Reset t, f, and variable levels. Keep lifetime records, μ, and the new b. The next run starts faster.</p>
+            <div class="p-stats">
+              <div class="p-stat"><div class="k">Δb</div><div class="v" id="db-val">0</div></div>
+              <div class="p-stat"><div class="k">b after</div><div class="v" id="b-after">1.00</div></div>
+              <div class="p-stat"><div class="k">Δμ</div><div class="v" id="dmu-val">0</div></div>
+              <div class="p-stat"><div class="k">μ after</div><div class="v" id="mu-after">0</div></div>
+            </div>
+            <div class="progress" title="Progress toward a meaningful prestige"><span id="p-bar"></span></div>
+            <p id="p-hint" style="margin-top:-8px;font-size:12px;color:var(--ink-mute)"></p>
+            <button class="btn primary wide" id="btn-prestige" disabled>Prestige</button>
+          </div>
+          <div class="formula-card p-card">
+            <h2>μ lemmas</h2>
+            <p>Permanent. Unlocked after the first prestige. Spent from the μ pool.</p>
+            <div id="mu-upgrades"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STATS -->
+      <section class="panel" id="panel-stats">
+        <div class="stat-grid" id="stats-grid"></div>
+        <div class="save-row">
+          <button class="btn" id="btn-export">Export save</button>
+          <button class="btn" id="btn-import">Import save</button>
+          <button class="btn danger" id="btn-reset">Hard reset</button>
+        </div>
+        <textarea id="save-box" placeholder="Save JSON appears here. Paste to import." spellcheck="false"></textarea>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span>The Equation · original idle · autosaves locally</span>
+      <span id="foot-rate"></span>
+    </footer>
+  </div>
+
+  <div id="toasts"></div>
+
+  <div class="modal" id="modal-prestige">
+    <div class="modal-card">
+      <h2>Prestige</h2>
+      <p>Reset the current equation. You will gain <b id="m-db"></b> to <i>b</i> and <b id="m-mu"></b> μ.</p>
+      <p style="margin-top:8px">t, f(t), and bought variable levels return to their start. b and μ remain.</p>
+      <div class="modal-actions">
+        <button class="btn" id="m-cancel">Remain</button>
+        <button class="btn primary" id="m-go">Prestige</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-reset">
+    <div class="modal-card">
+      <h2>Hard reset</h2>
+      <p>Erase all progress, including b, μ, and lifetime stats. This cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn" id="r-cancel">Cancel</button>
+        <button class="btn danger" id="r-go">Erase everything</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/num.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>

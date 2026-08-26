@@ -1,0 +1,515 @@
+(function () {
+  "use strict";
+
+  var SAVE_KEY = "the-equation-v1";
+  var game = new Game();
+  var tab = "equation";
+  var lastPaint = 0;
+  var canvas, ctx;
+  var prestigeArmed = false;
+
+  function $(id) { return document.getElementById(id); }
+
+  function toast(html, ms) {
+    var el = document.createElement("div");
+    el.className = "toast";
+    el.innerHTML = html;
+    $("toasts").appendChild(el);
+    setTimeout(function () {
+      el.style.opacity = "0";
+      el.style.transition = "opacity 0.4s";
+      setTimeout(function () { el.remove(); }, 400);
+    }, ms || 4200);
+  }
+
+  function drainEvents() {
+    var ev = game.events.splice(0, game.events.length);
+    for (var i = 0; i < ev.length; i++) {
+      var e = ev[i];
+      if (e.type === "unlock") toast("Unlocked <b>" + e.text.replace("Variable ", "").replace(" entered the equation.", "") + "</b> — " + e.text);
+      else if (e.type === "milestone") toast("<b>Milestone.</b> " + e.text);
+      else if (e.type === "prestige") toast("<b>Prestige.</b> " + e.text, 5000);
+      else if (e.type === "up") toast(e.text);
+      else if (e.type === "reset") toast(e.text);
+    }
+  }
+
+  /* ----- tabs ----- */
+  document.querySelectorAll(".tabs [data-tab]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      tab = btn.getAttribute("data-tab");
+      document.querySelectorAll(".tabs [data-tab]").forEach(function (b) {
+        b.classList.toggle("active", b === btn);
+      });
+      document.querySelectorAll(".panel").forEach(function (p) {
+        p.classList.toggle("active", p.id === "panel-" + tab);
+      });
+      paint(true);
+    });
+  });
+
+  /* ----- formula ----- */
+  function activeIds() {
+    return Game.VAR_ORDER.filter(function (id) { return game.isUnlocked(id); });
+  }
+
+  function formulaMain() {
+    var ids = activeIds();
+    var exp = ["<i>b</i>"].concat(ids.map(function (id) { return "<i>" + id + "</i>"; })).concat(["d<i>t</i>"]).join("·");
+    return "<i>f</i>(<i>t</i>+d<i>t</i>) = <i>f</i>(<i>t</i>)·<i>e</i><sup>" + exp + "</sup>";
+  }
+
+  function formulaSub() {
+    var ids = activeIds();
+    var f = formatLog(game.s.fLog);
+    var parts = [formatJS(game.s.b, 3)];
+    ids.forEach(function (id) { parts.push(formatJS(game.varValue(id), 2)); });
+    parts.push(formatJS(game.dtSpeed(), 3));
+    return f + " · e<sup>" + parts.join(" · ") + "</sup>";
+  }
+
+  /* ----- variables ----- */
+  function varRow(id, compact) {
+    var def = Game.VAR_DEFS[id];
+    var unlocked = game.isUnlocked(id);
+    var lv = game.s.vars[id];
+    var val = game.varValue(id);
+    var cost = game.costLog(id);
+    var can = game.canBuy(id);
+    var nextMs = 10 - (lv % 10);
+    var locked = !unlocked;
+    var why = "";
+    if (locked) {
+      why = "Unlocks at f(t) ≥ " + formatLog(def.unlockLog);
+    }
+    var hover = game.hovered === id ? " hovered" : "";
+    var html = '<div class="var-row' + (locked ? " locked" : "") + hover + '" data-id="' + id + '">';
+    html += '<div class="var-name">' + id + "</div>";
+    html += '<div class="var-info">';
+    if (locked) {
+      html += '<div class="val">' + why + "</div>";
+      html += '<div class="eff">' + def.blurb + "</div>";
+    } else {
+      html += '<div class="val">' + id + " = " + formatJS(val, 2) + " <span style='color:var(--ink-mute)'>lv " + lv + "</span></div>";
+      html += '<div class="eff">×' + formatJS(val, 2) + " on the exponent";
+      if (!compact) html += " · next ×2-style bump in " + nextMs + " buys";
+      html += "</div>";
+    }
+    html += "</div>";
+    html += '<div class="var-cost"><span class="n">' + (locked ? "—" : formatLog(cost)) + '</span>cost</div>';
+    html += '<button class="btn" data-buy="1" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy 1</button>";
+    html += '<button class="btn primary" data-buy="max" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy max</button>";
+    html += "</div>";
+    return html;
+  }
+
+  function renderVars(into, compact) {
+    var ids = [];
+    Game.VAR_ORDER.forEach(function (id) {
+      if (game.isUnlocked(id)) ids.push(id);
+    });
+    var nxt = game.nextLocked();
+    if (nxt) ids.push(nxt);
+    into.innerHTML = ids.map(function (id) { return varRow(id, compact); }).join("");
+  }
+
+  function bindVarClicks(root) {
+    root.addEventListener("click", function (ev) {
+      var t = ev.target.closest("[data-buy]");
+      if (!t) return;
+      var id = t.getAttribute("data-id");
+      game.hovered = id;
+      var n = game.buy(id, t.getAttribute("data-buy") === "max");
+      if (n) save(false);
+      paint(true);
+    });
+    root.addEventListener("mouseover", function (ev) {
+      var row = ev.target.closest(".var-row");
+      if (row && row.getAttribute("data-id")) game.hovered = row.getAttribute("data-id");
+    });
+  }
+
+  /* ----- upgrades ----- */
+  function renderUpgrades() {
+    var rows = [
+      {
+        id: "dt",
+        name: "dt — time speed",
+        desc: "Equation time runs faster. t and production both scale with dt.  " + game.s.up.dt + " / 12",
+        cost: game.upgradeCostLog("dt"),
+        can: game.canUpgrade("dt"),
+        effect: "dt = " + formatJS(game.dtSpeed(), 3)
+      },
+      {
+        id: "cheapX",
+        name: "Leaner x",
+        desc: "x costs grow more slowly.  " + game.s.up.cheapX + " / 8",
+        cost: game.upgradeCostLog("cheapX"),
+        can: game.canUpgrade("cheapX"),
+        effect: "×" + game.xGrowth().toFixed(2) + " per level"
+      }
+    ];
+    var html = "";
+    rows.forEach(function (u) {
+      var maxed = !isFinite(u.cost);
+      html += '<div class="up-row">';
+      html += '<div class="var-name" style="font-size:16px;letter-spacing:0.04em;font-style:normal;font-family:var(--sans)">' + (u.id === "dt" ? "dt" : "x′") + "</div>";
+      html += '<div class="var-info"><div class="val">' + u.name + '</div><div class="eff">' + u.desc + " · " + u.effect + "</div></div>";
+      html += '<div class="var-cost"><span class="n">' + (maxed ? "max" : formatLog(u.cost)) + "</span>cost</div>";
+      html += '<span></span>';
+      html += '<button class="btn primary" data-up="' + u.id + '"' + (u.can && !maxed ? "" : " disabled") + ">Buy</button>";
+      html += "</div>";
+    });
+    html += '<div class="up-row"><div class="var-name" style="font-size:16px;font-style:normal;font-family:var(--sans);color:var(--ink-dim)">∇t</div>';
+    html += '<div class="var-info"><div class="val">Advance t</div><div class="eff">Spend ~10% of f(t) to push the equation forward by a burst of time. Optional.</div></div>';
+    html += '<div class="var-cost"><span class="n">10%</span>of f</div><span></span>';
+    html += '<button class="btn" id="up-advance">Advance</button></div>';
+    $("upgrade-table").innerHTML = html;
+  }
+
+  function renderMuUp() {
+    if (game.s.prestiges < 1) {
+      $("mu-upgrades").innerHTML = '<p style="color:var(--ink-mute);font-size:13px">Complete a prestige to unlock lemmas bought with μ.</p>';
+      return;
+    }
+    var items = [
+      { id: "y", name: "Lemma of y", desc: "Each level adds to y and multiplies its contribution.", effect: "y × " + formatJS(game.varValue("y"), 2) },
+      { id: "dt", name: "Lemma of dt", desc: "Permanently adds to dt.", effect: "dt = " + formatJS(game.dtSpeed(), 3) }
+    ];
+    var html = "";
+    items.forEach(function (u) {
+      var cost = game.muUpgradeCost(u.id);
+      var can = game.s.mu >= cost;
+      html += '<div class="up-row">';
+      html += '<div class="var-name">' + (u.id === "y" ? "y" : "dt") + "</div>";
+      html += '<div class="var-info"><div class="val">' + u.name + " <span style='color:var(--ink-mute)'>lv " + game.s.muUp[u.id] + '</span></div><div class="eff">' + u.desc + "</div></div>";
+      html += '<div class="var-cost"><span class="n">' + formatJS(cost, 2) + "</span>μ</div>";
+      html += "<span></span>";
+      html += '<button class="btn primary" data-mu="' + u.id + '"' + (can ? "" : " disabled") + ">Buy</button>";
+      html += "</div>";
+    });
+    $("mu-upgrades").innerHTML = html;
+  }
+
+  /* ----- stats ----- */
+  function renderStats() {
+    var s = game.s;
+    var cells = [
+      ["f(t)", formatLog(s.fLog)],
+      ["t this run", formatTime(s.t)],
+      ["b", formatJS(s.b, 3)],
+      ["μ (spendable)", formatJS(s.mu, 2)],
+      ["Max f (lifetime)", s.maxFLayer > 0 ? formatNum(new Num(s.maxFLog, s.maxFLayer)) : formatLog(s.maxFLog)],
+      ["Max f this run", formatLog(s.runMaxFLog)],
+      ["Prestiges", String(s.prestiges)],
+      ["Lifetime μ", formatJS(s.lifetimeMu, 2)],
+      ["Play time", formatTime(s.playTime)],
+      ["Run time", formatTime(s.runTime)],
+      ["Buys", String(s.totalBuys)],
+      ["dt", formatJS(game.dtSpeed(), 3)]
+    ];
+    $("stats-grid").innerHTML = cells.map(function (c) {
+      return '<div class="stat-cell"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + "</div></div>";
+    }).join("");
+  }
+
+  /* ----- prestige panel ----- */
+  function prestigeProgress() {
+    var L = game._prestigeLog();
+    return Math.max(0, Math.min(1, L / 24));
+  }
+
+  function renderPrestige() {
+    var db = game.db();
+    var dmu = game.muGain();
+    var can = game.canPrestige();
+    $("db-val").textContent = can || db > 0 ? "+" + formatJS(db, 3) : "—";
+    $("b-after").textContent = formatJS(game.s.b + db, 3);
+    $("dmu-val").textContent = dmu > 0 ? "+" + formatJS(dmu, 2) : "—";
+    $("mu-after").textContent = formatJS(game.s.mu + dmu, 2);
+    $("p-bar").style.width = (prestigeProgress() * 100).toFixed(1) + "%";
+    $("btn-prestige").disabled = !can;
+    $("btn-prestige-mini").disabled = !can;
+    if (!can) {
+      var L = game._prestigeLog();
+      $("p-hint").textContent = "Prestige opens as log10(f) approaches 12. Currently " + (isFinite(L) ? L.toFixed(2) : "huge") + ".";
+    } else {
+      $("p-hint").textContent = "Δb is meaningful. Later runs: wait until (b+Δb)/b feels slow to grow.";
+    }
+    renderMuUp();
+  }
+
+  /* ----- graph ----- */
+  function drawGraph() {
+    if (!canvas) return;
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth || 640;
+    var h = canvas.clientHeight || 240;
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#101012";
+    ctx.fillRect(0, 0, w, h);
+
+    var pts = game.s.graph;
+    var padL = 42, padR = 10, padT = 10, padB = 22;
+    var gw = w - padL - padR, gh = h - padT - padB;
+
+    ctx.strokeStyle = "#2a2822";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, padT + gh);
+    ctx.lineTo(padL + gw, padT + gh);
+    ctx.stroke();
+
+    ctx.fillStyle = "#6c665c";
+    ctx.font = "10px Eq Sans, sans-serif";
+    ctx.fillText("t", padL + gw - 8, padT + gh + 16);
+    ctx.save();
+    ctx.translate(12, padT + gh / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("log10 f", 0, 0);
+    ctx.restore();
+
+    if (!pts.length) return;
+    var t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+    var l0 = 0, l1 = 1;
+    for (var i = 0; i < pts.length; i++) {
+      if (pts[i].l > l1) l1 = pts[i].l;
+    }
+    if (t1 <= t0) t1 = t0 + 1;
+    if (l1 <= l0) l1 = 1;
+
+    ctx.fillStyle = "#6c665c";
+    ctx.fillText(formatJS(l1, 1), 4, padT + 10);
+    ctx.fillText("0", 4, padT + gh);
+    ctx.fillText(formatTime(t1), padL + gw - 48, padT + gh + 16);
+
+    ctx.beginPath();
+    for (var j = 0; j < pts.length; j++) {
+      var x = padL + ((pts[j].t - t0) / (t1 - t0)) * gw;
+      var y = padT + gh - (pts[j].l / l1) * gh;
+      if (j === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = "#d4af4a";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    var grd = ctx.createLinearGradient(0, padT, 0, padT + gh);
+    grd.addColorStop(0, "rgba(212,175,74,0.18)");
+    grd.addColorStop(1, "rgba(212,175,74,0)");
+    ctx.lineTo(padL + gw, padT + gh);
+    ctx.lineTo(padL, padT + gh);
+    ctx.closePath();
+    ctx.fillStyle = grd;
+    ctx.fill();
+  }
+
+  /* ----- paint ----- */
+  function paint(force) {
+    var s = game.s;
+    $("top-t").textContent = formatTime(s.t);
+    $("top-b").textContent = formatJS(s.b, 3);
+    $("top-mu").textContent = formatJS(s.mu, 2);
+    $("top-dt").textContent = formatJS(game.dtSpeed(), 3);
+
+    $("f-value").textContent = s.fLayer ? formatNum(new Num(s.fLog, s.fLayer)) : formatLog(s.fLog);
+    $("growth").textContent = "+" + formatJS(game.growthRate(), 2) + " decades / s";
+    $("t-value").textContent = formatTime(s.t);
+    $("b-value").textContent = formatJS(s.b, 3);
+    $("mu-value").textContent = formatJS(s.mu, 2);
+    $("formula-main").innerHTML = formulaMain();
+    $("formula-sub").innerHTML = formulaSub();
+    $("foot-rate").textContent = "d(log₁₀ f)/dt = " + formatJS(game.growthRate(), 3);
+
+    $("btn-prestige-mini").disabled = !game.canPrestige();
+    $("autobuy-wrap").hidden = s.prestiges < 1;
+    $("autobuy").checked = !!s.autobuy;
+
+    if (force) {
+      renderVars($("eq-vars"), true);
+      renderVars($("var-table"), false);
+      renderUpgrades();
+      renderPrestige();
+      renderStats();
+    } else {
+      // Refresh affordance on a slower cadence so buttons do not jitter.
+      if (!paint._acc) paint._acc = 0;
+      paint._acc += 0.05;
+      if (paint._acc >= 0.28) {
+        paint._acc = 0;
+        if (tab === "equation") renderVars($("eq-vars"), true);
+        if (tab === "variables") renderVars($("var-table"), false);
+        if (tab === "upgrades") renderUpgrades();
+        if (tab === "prestige") renderPrestige();
+        if (tab === "stats") renderStats();
+      } else if (tab === "prestige") {
+        $("db-val").textContent = game.canPrestige() || game.db() > 0 ? "+" + formatJS(game.db(), 3) : "—";
+        $("p-bar").style.width = (prestigeProgress() * 100).toFixed(1) + "%";
+        $("btn-prestige").disabled = !game.canPrestige();
+      }
+    }
+
+    drawGraph();
+    drainEvents();
+  }
+
+  /* ----- clicks ----- */
+  bindVarClicks($("eq-vars"));
+  bindVarClicks($("var-table"));
+
+  $("btn-advance").addEventListener("click", function () {
+    if (game.advance()) { paint(true); save(false); }
+  });
+  $("upgrade-table").addEventListener("click", function (ev) {
+    if (ev.target.id === "up-advance") {
+      if (game.advance()) { paint(true); save(false); }
+      return;
+    }
+    var t = ev.target.closest("[data-up]");
+    if (t) {
+      game.buyUpgrade(t.getAttribute("data-up"));
+      paint(true); save(false);
+    }
+  });
+  $("mu-upgrades").addEventListener("click", function (ev) {
+    var t = ev.target.closest("[data-mu]");
+    if (t) {
+      game.buyMuUpgrade(t.getAttribute("data-mu"));
+      paint(true); save(true);
+    }
+  });
+  $("autobuy").addEventListener("change", function () {
+    game.s.autobuy = $("autobuy").checked;
+    save(false);
+  });
+
+  function openPrestigeModal() {
+    if (!game.canPrestige()) return;
+    $("m-db").textContent = "+" + formatJS(game.db(), 3);
+    $("m-mu").textContent = "+" + formatJS(game.muGain(), 2);
+    $("modal-prestige").classList.add("open");
+    prestigeArmed = true;
+  }
+  function doPrestige() {
+    $("modal-prestige").classList.remove("open");
+    prestigeArmed = false;
+    if (game.prestige()) {
+      save(true);
+      paint(true);
+    }
+  }
+  $("btn-prestige").addEventListener("click", openPrestigeModal);
+  $("btn-prestige-mini").addEventListener("click", openPrestigeModal);
+  $("m-cancel").addEventListener("click", function () {
+    $("modal-prestige").classList.remove("open");
+    prestigeArmed = false;
+  });
+  $("m-go").addEventListener("click", doPrestige);
+
+  $("btn-export").addEventListener("click", function () {
+    var json = game.serialize();
+    $("save-box").value = json;
+    try {
+      navigator.clipboard.writeText(json);
+      toast("Save copied to clipboard.");
+    } catch (e) {
+      toast("Save placed in the box below.");
+    }
+  });
+  $("btn-import").addEventListener("click", function () {
+    var raw = $("save-box").value.trim();
+    if (!raw) { toast("Paste a save JSON first."); return; }
+    if (game.loadJSON(raw)) {
+      save(true);
+      paint(true);
+      toast("Save imported.");
+    } else toast("Could not read that save.");
+  });
+  $("btn-reset").addEventListener("click", function () {
+    $("modal-reset").classList.add("open");
+  });
+  $("r-cancel").addEventListener("click", function () { $("modal-reset").classList.remove("open"); });
+  $("r-go").addEventListener("click", function () {
+    $("modal-reset").classList.remove("open");
+    game.hardReset();
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    paint(true);
+  });
+
+  window.addEventListener("keydown", function (ev) {
+    if (ev.target && (ev.target.tagName === "TEXTAREA" || ev.target.tagName === "INPUT")) return;
+    var k = ev.key;
+    if (k === "m" || k === "M") {
+      var id = game.hovered || "x";
+      if (game.buy(id, true)) { paint(true); save(false); }
+    } else if (k === "p" || k === "P") {
+      if (prestigeArmed) doPrestige();
+      else openPrestigeModal();
+    } else if (k === "1") document.querySelector("[data-tab=equation]").click();
+    else if (k === "2") document.querySelector("[data-tab=variables]").click();
+    else if (k === "3") document.querySelector("[data-tab=upgrades]").click();
+    else if (k === "4") document.querySelector("[data-tab=prestige]").click();
+    else if (k === "5") document.querySelector("[data-tab=stats]").click();
+  });
+
+  /* ----- save ----- */
+  function save(force) {
+    try { localStorage.setItem(SAVE_KEY, game.serialize()); } catch (e) {}
+  }
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { raw = null; }
+    if (!raw) return;
+    var last = game.loadJSON(raw);
+    if (!last) return;
+    var elapsed = (Date.now() - last) / 1000;
+    var recap = game.applyOffline(elapsed);
+    if (recap && recap.grant >= 2) {
+      toast(
+        "<b>While you were away</b> (" + formatTime(recap.grant) + "), f(t) grew from " +
+        formatLog(recap.before.log) + " to " + formatLog(recap.afterLog) + ".",
+        7000
+      );
+    }
+  }
+
+  /* ----- loop ----- */
+  canvas = $("graph");
+  ctx = canvas.getContext("2d");
+
+  load();
+  paint(true);
+  save(true);
+
+  var acc = 0;
+  var last = performance.now();
+  var saveAcc = 0;
+  function frame(now) {
+    var dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.25) dt = 0.25;
+    acc += dt;
+    var step = 1 / 25;
+    while (acc >= step) {
+      game.tick(step);
+      acc -= step;
+    }
+    saveAcc += dt;
+    if (saveAcc >= 4) { saveAcc = 0; save(false); }
+    if (now - lastPaint > 50) {
+      lastPaint = now;
+      paint(false);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  window.addEventListener("beforeunload", function () { save(true); });
+})();
