@@ -120,7 +120,7 @@
     var terms = formulaTerms();
     var sig = terms.join(",");
     var prev = paintedTerms;
-    if (prev === sig) {
+    if (prev === sig || (writeInUntil && performance.now() < writeInUntil && prev)) {
       updateFormulaSubNumbers();
       return;
     }
@@ -135,12 +135,7 @@
     $("formula-main").innerHTML = formulaMainHTML(added);
     $("formula-sub").innerHTML = formulaSubHTML(added);
     if (added.length && motionOk()) {
-      setTimeout(function () {
-        var nodes = document.querySelectorAll("#formula-main .write-in, #formula-sub .write-in");
-        for (var j = 0; j < nodes.length; j++) {
-          nodes[j].classList.remove("write-in");
-        }
-      }, 1550);
+      writeInUntil = performance.now() + 2200;
     }
   }
 
@@ -152,6 +147,7 @@
   var juiceReady = false;
   var lastDecade = { layer: 0, d: 0 };
   var varFlashUntil = {};
+  var writeInUntil = 0;
 
   function hushJuice(rebuildFormula) {
     juiceReady = false;
@@ -180,7 +176,7 @@
         for (var k = 0; k < n2.length; k++) n2[k].classList.remove("lit");
       }, 600);
     }
-    varFlashUntil[id] = performance.now() + 480;
+    varFlashUntil[id] = performance.now() + 600;
     applyVarFlashes();
   }
 
@@ -694,9 +690,12 @@
     }
 
     if (force) {
-      renderVars($("eq-vars"), true);
-      renderVars($("var-table"), false);
-      applyVarFlashes();
+      if (anyVarFlash()) applyVarFlashes();
+      else {
+        renderVars($("eq-vars"), true);
+        renderVars($("var-table"), false);
+        applyVarFlashes();
+      }
       renderUpgrades();
       renderPrestige();
       renderStars();

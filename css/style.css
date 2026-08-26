@@ -666,7 +666,7 @@ textarea#save-box {
 
 /* ----- presentation juice ----- */
 .f-value.flinch {
-  animation: flinch 0.32s cubic-bezier(0.2, 0.85, 0.25, 1);
+  animation: flinch 0.45s cubic-bezier(0.2, 0.85, 0.25, 1);
 }
 @keyframes flinch {
   0% { transform: scale(1); }
@@ -728,7 +728,7 @@ textarea#save-box {
 
 .formula-main [data-term].write-in,
 .formula-sub [data-term].write-in {
-  animation: write-in 1.4s ease-out;
+  animation: write-in 2.2s ease-out;
 }
 @keyframes write-in {
   0% {
@@ -763,10 +763,10 @@ textarea#save-box {
 }
 
 .f-value.flinch.decade-pulse {
-  animation: flinch 0.32s cubic-bezier(0.2, 0.85, 0.25, 1), decade-pulse 0.55s ease-out;
+  animation: flinch 0.45s cubic-bezier(0.2, 0.85, 0.25, 1), decade-pulse 0.55s ease-out;
 }
 .f-value.flinch.decade-pulse.drop {
-  animation: flinch 0.32s cubic-bezier(0.2, 0.85, 0.25, 1), decade-pulse 0.4s ease-out;
+  animation: flinch 0.45s cubic-bezier(0.2, 0.85, 0.25, 1), decade-pulse 0.4s ease-out;
   filter: brightness(0.82);
 }
 
