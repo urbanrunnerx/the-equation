@@ -957,6 +957,18 @@
   });
   $("rw-go").addEventListener("click", doRewrite);
 
+  function applyImportedSave(raw, emptyMsg) {
+    if (!raw) { toast(emptyMsg); return; }
+    var json = (typeof SaveCode !== "undefined") ? SaveCode.decode(raw) : raw;
+    if (!json) { toast("Could not read that save."); return; }
+    if (game.loadJSON(json)) {
+      save(true);
+      hushJuice(true);
+      paint(true);
+      toast("Save imported.");
+    } else toast("Could not read that save.");
+  }
+
   $("btn-export").addEventListener("click", function () {
     var json = game.serialize();
     $("save-box").value = json;
@@ -968,14 +980,29 @@
     }
   });
   $("btn-import").addEventListener("click", function () {
-    var raw = $("save-box").value.trim();
-    if (!raw) { toast("Paste a save JSON first."); return; }
-    if (game.loadJSON(raw)) {
-      save(true);
-      hushJuice(true);
-      paint(true);
-      toast("Save imported.");
-    } else toast("Could not read that save.");
+    applyImportedSave($("save-box").value.trim(), "Paste a save JSON or code first.");
+  });
+  $("btn-copy-code").addEventListener("click", function () {
+    var code = SaveCode.encode(game.serialize());
+    $("save-code").value = code;
+    function copied() { toast("Save code copied."); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(copied).catch(function () {
+        toast("Save code placed in the field.");
+      });
+    } else {
+      try {
+        $("save-code").focus();
+        $("save-code").select();
+        if (document.execCommand("copy")) copied();
+        else toast("Save code placed in the field.");
+      } catch (e) {
+        toast("Save code placed in the field.");
+      }
+    }
+  });
+  $("btn-load-code").addEventListener("click", function () {
+    applyImportedSave($("save-code").value.trim(), "Paste a save code first.");
   });
   $("btn-reset").addEventListener("click", function () {
     $("modal-reset").classList.add("open");

@@ -6,15 +6,11 @@ You do not click to produce. Time integrates the equation. You spend *f(t)* on v
 
 ## Open it
 
-No build step. No network. No accounts.
+Play in the browser: **https://urbanrunnerx.github.io/the-equation/**
 
-**Fastest:** in Chrome,
+No build step. No accounts. On a phone, open that URL and use **Add to Home Screen** (standalone, charcoal/gold). Relative `css/`, `js/`, and `fonts/` paths also work from a local `file://` copy.
 
-```
-file:///workspace/formula-idle/index.html
-```
-
-Or serve the folder:
+**Local:** open `index.html` in Chrome, or serve the folder:
 
 ```bash
 cd /workspace/formula-idle
@@ -23,7 +19,7 @@ python3 -m http.server 8765
 
 Then open `http://localhost:8765/`.
 
-Files: `index.html` + `css/style.css` + `js/*.js` + bundled Liberation fonts.
+Files: `index.html` + `css/style.css` + `js/*.js` + bundled Liberation fonts + `manifest.webmanifest` + `icon-180.png`.
 
 ## How to play
 
@@ -46,7 +42,7 @@ Keyboard: **M** buy max on the last hovered variable, **P** prestige (opens the 
 | Prestige (b, μ) | log₁₀ f ≳ 12 | b, μ, stars, φ, theories | t, f, variables, f-upgrades |
 | Rewrite (φ) | 8+ prestiges, b ≥ 8, and Δφ ≥ 0.45 | φ, μ lemmas, stars, theories | t, f, variables, f-upgrades, **b → 1** |
 | Theories (τ) | first rewrite | theory τₙ across publishes | the published theory's currencies |
-| Stars | achievements, any time | stars & shop through prestige/rewrite | hard reset only |
+| Stars | achievements, any time | stars & shop through prestige/rewrite | wipe equation only |
 | w, α | Stars shop + high f this run | — | with variables on prestige/rewrite |
 
 ## Notation
@@ -59,7 +55,7 @@ Keyboard: **M** buy max on the last hovered variable, **P** prestige (opens the 
 
 ## Save
 
-Autosaves to `localStorage` key `the-equation-v2` every few seconds and on prestige/rewrite. If that key is empty, a one-shot migrate reads `the-equation-v1` and writes v2. Missing φ, τ, stars, w, α default to 0/1. Stats tab: export / import JSON, hard reset (with confirm). Offline progress is granted at the last known rate, capped at 8 hours, with a recap toast. Active theories also tick while away.
+Autosaves to `localStorage` key `the-equation-v2` every few seconds and on prestige/rewrite. If that key is empty, a one-shot migrate reads `the-equation-v1` and writes v2. Missing φ, τ, stars, w, α default to 0/1. Stats tab: export / import JSON (import also accepts an `EQ1.` save code), **Copy save code** (LZ-compressed, prefix `EQ1.`, for texting between devices), and **Wipe equation** (confirm modal; toast: *The chalkboard is clean*). Offline progress is granted at the last known rate, capped at 8 hours, with a recap toast. Active theories also tick while away.
 
 ## Formula
 

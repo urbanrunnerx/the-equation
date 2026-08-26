@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="The Equation" />
   <title>The Equation</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -247,9 +254,14 @@
         <div class="save-row">
           <button class="btn" id="btn-export">Export save</button>
           <button class="btn" id="btn-import">Import save</button>
-          <button class="btn danger" id="btn-reset">Hard reset</button>
+          <button class="btn danger" id="btn-reset">Wipe equation</button>
         </div>
-        <textarea id="save-box" placeholder="Save JSON appears here. Paste to import." spellcheck="false"></textarea>
+        <textarea id="save-box" placeholder="Save JSON appears here. Paste a JSON backup or an EQ1. code to import." spellcheck="false"></textarea>
+        <div class="save-row save-code-row">
+          <button class="btn" id="btn-copy-code">Copy save code</button>
+          <input type="text" id="save-code" placeholder="Paste save code (EQ1.…)" spellcheck="false" autocomplete="off" />
+          <button class="btn" id="btn-load-code">Load</button>
+        </div>
       </section>
     </main>
 
@@ -299,16 +311,17 @@
 
   <div class="modal" id="modal-reset">
     <div class="modal-card">
-      <h2>Hard reset</h2>
-      <p>Erase all progress, including b, μ, φ, stars, theories, and lifetime stats. This cannot be undone.</p>
+      <h2>Wipe equation</h2>
+      <p>The chalkboard is clean. All progress is erased — b, μ, φ, stars, theories, and lifetime stats. This cannot be undone.</p>
       <div class="modal-actions">
         <button class="btn" id="r-cancel">Cancel</button>
-        <button class="btn danger" id="r-go">Erase everything</button>
+        <button class="btn danger" id="r-go">Wipe equation</button>
       </div>
     </div>
   </div>
 
   <script src="js/num.js"></script>
+  <script src="js/lz.js"></script>
   <script src="js/game.js"></script>
   <script src="js/ui.js"></script>
 </body>
