@@ -31,10 +31,10 @@ Files: `index.html` + `css/style.css` + `js/*.js` + bundled Liberation fonts.
 2. Every 10 levels, a variable gets a stepwise bump.
 3. **y**, **z**, **u**, **v** unlock as *f* this run climbs. Each multiplies the exponent. **w** and **α** are later still: they need a Stars-shop purchase *and* high *f*.
 4. On the Upgrades tab: faster **dt**, cheaper **x**. Time is the engine — there is nothing you must click.
-5. When Δb is meaningful (progress bar on Prestige), prestige: reset *t*, *f*, and variable levels; keep **b** and **μ**. Next run is faster. Two μ lemmas unlock after the first prestige.
+5. When Δb is meaningful (progress bar on Prestige), prestige: reset *t*, *f*, and variable levels; keep **b** and **μ**. Next run is faster. Six μ lemmas (finite ranks) unlock after the first prestige and survive Rewrite.
 6. Autobuy (Equation tab) appears after you have prestiged once (or earlier if you buy it with stars). It buys toward the next ×10 milestone on one variable per tick, plus at most one upgrade.
-7. **Stars** come from achievements (first buy, *f* milestones, prestiges, play time, …), never from clicking. Spend them in the Stars shop: extra variables, early autobuy, a small permanent production multiplier, auto-prestige.
-8. After a few prestiges and enough **b**, **Rewrite**: reset *t*, *f*, variables, f-upgrades, and *b* (returns to 1). Gain **φ**, which multiplies the exponent. μ lemmas, stars, and theories remain.
+7. **Stars** come from achievements (first buy, *f* milestones, prestiges, rewrites, play time, publications, …), never from clicking. Spend them in the Stars shop: extra variables, early autobuy, Buy 10, notation, persistent dt, a small capped production lemma, auto-prestige.
+8. After several prestige cycles (8 prestiges and **b** ≥ 8, then enough extra **b** that Δφ ≥ 0.45), **Rewrite**: reset *t*, *f*, variables, f-upgrades, and *b* (returns to 1). Gain **φ**, which is the power on the variable product. μ lemmas, stars, and theories remain.
 9. After the first rewrite, the **Theories** tab opens. Two mini-equations (Recurrence, Coupled rates) tick while active. **Publish** resets that theory and raises its τₙ. Main **τ** = (1+τ₁)(1+τ₂).
 
 Keyboard: **M** buy max on the last hovered variable, **P** prestige (opens the confirm modal; P again confirms), **R** rewrite (same pattern). **1–7** switch tabs.
@@ -44,7 +44,7 @@ Keyboard: **M** buy max on the last hovered variable, **P** prestige (opens the 
 | Layer | Gate | Keeps | Resets |
 | --- | --- | --- | --- |
 | Prestige (b, μ) | log₁₀ f ≳ 12 | b, μ, stars, φ, theories | t, f, variables, f-upgrades |
-| Rewrite (φ) | 3+ prestiges and b ≥ 2.6 | φ, μ lemmas, stars, theories | t, f, variables, f-upgrades, **b → 1** |
+| Rewrite (φ) | 8+ prestiges, b ≥ 8, and Δφ ≥ 0.45 | φ, μ lemmas, stars, theories | t, f, variables, f-upgrades, **b → 1** |
 | Theories (τ) | first rewrite | theory τₙ across publishes | the published theory's currencies |
 | Stars | achievements, any time | stars & shop through prestige/rewrite | hard reset only |
 | w, α | Stars shop + high f this run | — | with variables on prestige/rewrite |
@@ -59,7 +59,7 @@ Keyboard: **M** buy max on the last hovered variable, **P** prestige (opens the 
 
 ## Save
 
-Autosaves to `localStorage` every few seconds and on prestige/rewrite. Save schema **v2** (v1 files still load: missing φ, τ, stars, w, α default to 0/1). Stats tab: export / import JSON, hard reset (with confirm). Offline progress is granted at the last known rate, capped at 8 hours, with a recap toast. Active theories also tick while away.
+Autosaves to `localStorage` key `the-equation-v2` every few seconds and on prestige/rewrite. If that key is empty, a one-shot migrate reads `the-equation-v1` and writes v2. Missing φ, τ, stars, w, α default to 0/1. Stats tab: export / import JSON, hard reset (with confirm). Offline progress is granted at the last known rate, capped at 8 hours, with a recap toast. Active theories also tick while away.
 
 ## Formula
 
@@ -69,10 +69,10 @@ Early game (locked factors omitted, treated as 1):
 f(t + dt) = f(t) \cdot \exp(b \cdot x \cdot dt)
 \]
 
-After Rewrite and theories:
+After Rewrite and theories, φ powers only the variable product (dt stays linear; τ multiplies):
 
 \[
-f(t + dt) = f(t) \cdot \exp(b \cdot \varphi \cdot \tau \cdot x \cdot y \cdot \ldots \cdot dt)
+f(t + dt) = f(t) \cdot \exp(b \cdot (x \cdot y \cdot \ldots)^{\varphi} \cdot \tau \cdot dt)
 \]
 
-φ starts at 1; τ starts at 1. A small Stars-shop multiplier also folds into the coefficient (shown on the Stars tab, not in the live formula). *dt* starts below 1 real-second and is an upgrade, so *t* is equation time.
+φ starts at 1; τ starts at 1. A small Stars-shop multiplier is a silent coefficient (shown on the Stars tab, not in the live formula). *dt* starts below 1 real-second and is an upgrade, so *t* is equation time.

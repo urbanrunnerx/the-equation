@@ -1,9 +1,11 @@
 /**
  * The Equation — core simulation.
- * Growth:  f(t+dt) = f(t) * exp(b * φ * τ * Π(vars) * dt)
- * Stored as log10:  d(log10 f)/dt = b * φ * τ * Π(vars) * dtSpeed * log10(e)
- * φ (phi) from Rewrite; τ from theories; both default to 1 so v1 saves still work.
- * Buying divides f by the cost (fLog -= costLog), so spending always bites.
+ * Before rewrite:  f(t+dt) = f(t) * exp(b * Π(vars) * dt)
+ * After rewrite:   f(t+dt) = f(t) * exp(b * Π(vars)^φ * τ * dt)
+ * φ powers the variable product only. dt stays linear. τ multiplies the exponent.
+ * starMult is a silent coefficient on the same product (not shown in the live formula).
+ * Stored as log10: d(log10 f)/d(real s) = b * Π^φ * τ * starMult * dtSpeed * log10(e)
+ *   (computed in logs to avoid overflow). Buying divides f (fLog -= costLog).
  */
 (function (root) {
   "use strict";
@@ -111,7 +113,11 @@
     { id: "play5", name: "Five minutes", desc: "Play for five minutes.", stars: 1 },
     { id: "play15", name: "Quarter hour", desc: "Play for fifteen minutes.", stars: 1 },
     { id: "pub1", name: "First publication", desc: "Publish a theory.", stars: 2 },
-    { id: "buyW", name: "Wider product", desc: "Buy w.", stars: 2 }
+    { id: "buyW", name: "Wider product", desc: "Buy w.", stars: 2 },
+    { id: "buyA", name: "Outer coefficient", desc: "Buy α.", stars: 3 },
+    { id: "r3", name: "Third rewrite", desc: "Rewrite the equation three times.", stars: 4 },
+    { id: "pubBoth", name: "Two papers", desc: "Publish both Recurrence and Coupled rates.", stars: 3 },
+    { id: "play60", name: "Full hour", desc: "Play for one hour.", stars: 2 }
   ];
 
   var STAR_SHOP = [
@@ -125,8 +131,8 @@
     {
       id: "prodMult",
       name: "Lemma of stars",
-      desc: "Permanent +8% to the exponent coefficient per level.",
-      max: 6,
+      desc: "Permanent +3% to the exponent coefficient per level. Caps at 3.",
+      max: 3,
       cost: function (lv) { return 2 + lv; }
     },
     {
@@ -149,6 +155,27 @@
       desc: "Unlock a toggle: prestige automatically when Δb ≥ threshold.",
       max: 1,
       cost: function () { return 5; }
+    },
+    {
+      id: "buy10",
+      name: "Buy 10",
+      desc: "Show a Buy 10 button on variables.",
+      max: 1,
+      cost: function () { return 3; }
+    },
+    {
+      id: "notation",
+      name: "Notation",
+      desc: "Unlock scientific and engineering notation options.",
+      max: 1,
+      cost: function () { return 2; }
+    },
+    {
+      id: "persistUp",
+      name: "Persistent dt",
+      desc: "Keep dt (time-speed) upgrades through prestige. Rewrite still resets them.",
+      max: 1,
+      cost: function () { return 5; }
     }
   ];
 
@@ -167,8 +194,48 @@
   }
 
   function defaultStarShop() {
-    return { earlyAutobuy: 0, prodMult: 0, unlockW: 0, unlockA: 0, autoPrestige: 0 };
+    return {
+      earlyAutobuy: 0, prodMult: 0, unlockW: 0, unlockA: 0,
+      autoPrestige: 0, buy10: 0, notation: 0, persistUp: 0
+    };
   }
+
+  function defaultMuUp() {
+    return { y: 0, dt: 0, auto: 0, cheapX: 0, theory: 0, startF: 0 };
+  }
+
+  var MU_UPS = [
+    {
+      id: "y", name: "Lemma of y", short: "y", max: 5,
+      desc: "Each level adds to y and multiplies its contribution.",
+      cost: function (lv) { return 5 * Math.pow(2.5, lv); }
+    },
+    {
+      id: "dt", name: "Lemma of dt", short: "dt", max: 5,
+      desc: "Permanently adds to dt.",
+      cost: function (lv) { return 8 * Math.pow(2.4, lv); }
+    },
+    {
+      id: "auto", name: "Lemma of haste", short: "auto", max: 5,
+      desc: "Autobuy pulses more often.",
+      cost: function (lv) { return 6 * Math.pow(2.5, lv); }
+    },
+    {
+      id: "cheapX", name: "Lemma of x", short: "x′", max: 5,
+      desc: "x costs grow more slowly, permanently.",
+      cost: function (lv) { return 7 * Math.pow(2.5, lv); }
+    },
+    {
+      id: "theory", name: "Lemma of the workshop", short: "τ", max: 5,
+      desc: "Theories accumulate faster.",
+      cost: function (lv) { return 10 * Math.pow(2.6, lv); }
+    },
+    {
+      id: "startF", name: "Lemma of the first line", short: "f₀", max: 5,
+      desc: "Each new run starts with more f. No waiting on the first buy.",
+      cost: function (lv) { return 12 * Math.pow(2.4, lv); }
+    }
+  ];
 
   function defaultVars() {
     return { x: 0, y: 0, z: 0, u: 0, v: 0, w: 0, a: 0 };
@@ -186,7 +253,9 @@
       phi: 1,
       vars: defaultVars(),
       up: { dt: 0, cheapX: 0 },
-      muUp: { y: 0, dt: 0 },
+      muUp: defaultMuUp(),
+      notation: "mix",
+      theoriesSeen: false,
       autobuy: false,
       autobuyAcc: 0,
       autobuyIdx: 0,
@@ -224,6 +293,7 @@
   Game.VAR_DEFS = VAR_DEFS;
   Game.ACHIEVEMENTS = ACHIEVEMENTS;
   Game.STAR_SHOP = STAR_SHOP;
+  Game.MU_UPS = MU_UPS;
 
   Game.prototype.emit = function (type, text) {
     this.events.push({ type: type, text: text, at: Date.now() });
@@ -240,8 +310,20 @@
   };
 
   Game.prototype.xGrowth = function () {
-    var g = 3 * Math.pow(0.93, this.s.up.cheapX);
+    var g = 3 * Math.pow(0.93, this.s.up.cheapX) * Math.pow(0.95, this.s.muUp.cheapX || 0);
     return Math.max(2.12, g);
+  };
+
+  Game.prototype.autobuyInterval = function () {
+    return 0.4 / (1 + 0.35 * (this.s.muUp.auto || 0));
+  };
+
+  Game.prototype.theoryMult = function () {
+    return 1 + 0.2 * (this.s.muUp.theory || 0);
+  };
+
+  Game.prototype.startFLog = function () {
+    return 1 + 0.5 * (this.s.muUp.startF || 0);
   };
 
   Game.prototype.varValue = function (id) {
@@ -273,8 +355,6 @@
     for (var i = 0; i < VAR_ORDER.length; i++) {
       var id = VAR_ORDER[i];
       if (this.isUnlocked(id)) continue;
-      var def = VAR_DEFS[id];
-      if (def.starGate && !(this.s.starShop && this.s.starShop[def.starGate] > 0)) continue;
       return id;
     }
     return null;
@@ -315,19 +395,54 @@
 
   Game.prototype.starMult = function () {
     var lv = (this.s.starShop && this.s.starShop.prodMult) || 0;
-    return 1 + 0.08 * lv;
+    return 1 + 0.03 * lv;
   };
 
-  /** Coefficient inside the exp: b * φ * τ * starMult * Π(vars) */
+  /** log10 of Π(vars). Unlocked variables only. */
+  Game.prototype.log10Product = function () {
+    var s = 0;
+    for (var i = 0; i < VAR_ORDER.length; i++) {
+      var id = VAR_ORDER[i];
+      if (!this.isUnlocked(id)) continue;
+      var v = this.varValue(id);
+      if (v > 0 && isFinite(v)) s += Math.log10(v);
+    }
+    return s;
+  };
+
+  /**
+   * Π^φ (or Π when rewrite has not happened).
+   * φ is the power on the variable product only.
+   */
+  Game.prototype.poweredProduct = function () {
+    var phi = this.showPhi() ? this.phi() : 1;
+    var lp = this.log10Product();
+    var log10p = lp * phi;
+    if (log10p > 300) return 1e300;
+    if (log10p < -20) return 0;
+    return Math.pow(10, log10p);
+  };
+
+  /** Coefficient inside the exp, excluding dt: b * Π^φ * τ * starMult */
   Game.prototype.exponentCoeff = function () {
-    return this.s.b * this.phi() * this.tau() * this.starMult() * this.product();
+    return this.s.b * this.poweredProduct() * this.tau() * this.starMult();
   };
 
   /** Uncapped d(log10 f) / d(real second). Use displayRate() for UI and ticks. */
   Game.MAX_DLOG_PER_SEC = MAX_DLOG_PER_SEC;
 
   Game.prototype.growthRate = function () {
-    return this.exponentCoeff() * this.dtSpeed() * LOG10E;
+    // log10(b * Π^φ * τ * starMult * dt * log10e)
+    var phi = this.showPhi() ? this.phi() : 1;
+    var log10rate = Math.log10(Math.max(this.s.b, 1e-300))
+      + this.log10Product() * phi
+      + Math.log10(Math.max(this.tau(), 1e-300))
+      + Math.log10(Math.max(this.starMult(), 1e-300))
+      + Math.log10(Math.max(this.dtSpeed(), 1e-300))
+      + Math.log10(LOG10E);
+    if (log10rate > 300) return 1e300;
+    if (log10rate < -20) return 0;
+    return Math.pow(10, log10rate);
   };
 
   /** Rate the sim actually applies (clamped decades / real second). */
@@ -494,7 +609,10 @@
 
   Game.prototype.buy = function (id, max) {
     if (!this.isUnlocked(id)) return 0;
-    var n = max ? this.buyableCount(id) : (this.canBuy(id) ? 1 : 0);
+    var n;
+    if (max === true || max === "max") n = this.buyableCount(id);
+    else if (max === 10 || max === "10") n = Math.min(10, this.buyableCount(id));
+    else n = this.canBuy(id) ? 1 : 0;
     return this._buyN(id, n);
   };
 
@@ -564,19 +682,29 @@
     return this._affordLog() >= cost;
   };
 
+  Game.prototype.muUpDef = function (which) {
+    for (var i = 0; i < MU_UPS.length; i++) {
+      if (MU_UPS[i].id === which) return MU_UPS[i];
+    }
+    return null;
+  };
+
   Game.prototype.muUpgradeCost = function (which) {
+    var def = this.muUpDef(which);
+    if (!def) return Infinity;
     var lv = this.s.muUp[which] || 0;
-    if (which === "y") return 5 * Math.pow(3.2, lv);
-    if (which === "dt") return 8 * Math.pow(2.8, lv);
-    return Infinity;
+    if (lv >= def.max) return Infinity;
+    return def.cost(lv);
   };
 
   Game.prototype.buyMuUpgrade = function (which) {
+    var def = this.muUpDef(which);
+    if (!def) return false;
     var cost = this.muUpgradeCost(which);
-    if (this.s.mu < cost) return false;
+    if (!isFinite(cost) || this.s.mu < cost) return false;
     this.s.mu -= cost;
-    this.s.muUp[which] += 1;
-    this.emit("up", which === "y" ? "y-production lemma strengthened" : "dt lemma strengthened");
+    this.s.muUp[which] = (this.s.muUp[which] || 0) + 1;
+    this.emit("up", def.name + " strengthened");
     return true;
   };
 
@@ -605,13 +733,15 @@
     return this.db() >= 0.18;
   };
 
-  Game.prototype._resetRun = function () {
+  Game.prototype._resetRun = function (opts) {
     var s = this.s;
+    var keepDt = opts && opts.persistUp && s.starShop && s.starShop.persistUp > 0;
+    var keptDt = keepDt ? s.up.dt : 0;
     s.t = 0;
-    s.fLog = 1;
+    s.fLog = this.startFLog();
     s.fLayer = 0;
     s.vars = defaultVars();
-    s.up = { dt: 0, cheapX: 0 };
+    s.up = { dt: keptDt, cheapX: 0 };
     s.runTime = 0;
     s.runMaxFLog = 0;
     s.graph = [];
@@ -628,7 +758,7 @@
     this.s.muTotal += dmu;
     this.s.lifetimeMu += dmu;
     this.s.prestiges += 1;
-    this._resetRun();
+    this._resetRun({ persistUp: true });
     this.emit("prestige", "b → " + root.formatJS(this.s.b, 3) + "   μ +" + root.formatJS(dmu, 2));
     this.checkAchievements();
     return true;
@@ -639,12 +769,12 @@
   Game.prototype.dphi = function () {
     var b = this.s.b;
     if (!(b > 1.2)) return 0;
-    // First rewrite is a session goal after several prestiges, not hours.
-    return Math.pow((b - 1) / 2.2, 0.72);
+    // Scaled so Δφ = 0.45 is not free at the b≥8 unlock (needs ~b=12).
+    return Math.pow((b - 1) / 30, 0.75);
   };
 
   Game.prototype.rewriteUnlocked = function () {
-    return this.s.prestiges >= 3 && this.s.b >= 2.6;
+    return this.s.prestiges >= 8 && this.s.b >= 8;
   };
 
   Game.prototype.canRewrite = function () {
@@ -659,7 +789,7 @@
     this.s.b = 1;
     // Prestige-layer reset: b returns to 1. μ and μ lemmas are kept
     // (learned permanently). Stars, theories, and φ persist.
-    this._resetRun();
+    this._resetRun({ persistUp: false });
     this.emit("rewrite", "φ → " + root.formatJS(this.s.phi, 3) + "   b returns to 1");
     this.checkAchievements();
     return true;
@@ -680,18 +810,27 @@
       case "p5": return s.prestiges >= 5;
       case "p15": return s.prestiges >= 15;
       case "firstR": return s.rewrites >= 1;
-      case "firstT": return s.rewrites >= 1;
+      case "firstT": return !!s.theoriesSeen;
       case "buyY": return (s.vars.y || 0) >= 1;
       case "buyZ": return (s.vars.z || 0) >= 1;
       case "play5": return s.playTime >= 300;
       case "play15": return s.playTime >= 900;
+      case "play60": return s.playTime >= 3600;
       case "pub1": {
         var th = s.theories;
         if (!th) return false;
         return ((th.recurrence && th.recurrence.published) || 0) +
           ((th.dual && th.dual.published) || 0) >= 1;
       }
+      case "pubBoth": {
+        var thb = s.theories;
+        if (!thb) return false;
+        return ((thb.recurrence && thb.recurrence.published) || 0) >= 1 &&
+          ((thb.dual && thb.dual.published) || 0) >= 1;
+      }
       case "buyW": return (s.vars.w || 0) >= 1;
+      case "buyA": return (s.vars.a || 0) >= 1;
+      case "r3": return s.rewrites >= 3;
       default: return false;
     }
   };
@@ -748,12 +887,15 @@
     if (id === "recurrence") {
       var r = th.recurrence;
       // ρ_{n+1} = ρ + c1·c2·1.28^{c3} · (1 + 0.35 c4), sped a little by own τ
-      return 0.42 * r.c1 * r.c2 * Math.pow(1.28, r.c3) * (1 + 0.35 * r.c4) * (1 + 0.12 * r.tau);
+      // Rates cut ~15× so a first publish is 15–30 min of focused play.
+      return 0.028 * r.c1 * r.c2 * Math.pow(1.28, r.c3) * (1 + 0.35 * r.c4) *
+        (1 + 0.12 * r.tau) * this.theoryMult();
     }
     if (id === "dual") {
       var d = th.dual;
-      var dLam = 0.5 * d.a1 * Math.pow(1.25, d.a2) * (1 + 0.1 * d.tau);
-      var dSig = d.lambda * (0.09 * d.a3) * Math.pow(1.2, d.a4) * (1 + 0.1 * d.tau);
+      var tm = this.theoryMult();
+      var dLam = 0.032 * d.a1 * Math.pow(1.25, d.a2) * (1 + 0.1 * d.tau) * tm;
+      var dSig = d.lambda * (0.006 * d.a3) * Math.pow(1.2, d.a4) * (1 + 0.1 * d.tau) * tm;
       return { lambda: dLam, sigma: dSig };
     }
     return 0;
@@ -905,7 +1047,8 @@
 
     if (s.autobuy && this.autobuyAvailable()) {
       s.autobuyAcc = (s.autobuyAcc || 0) + realDt;
-      if (s.autobuyAcc >= 0.4) {
+      var interval = this.autobuyInterval();
+      if (s.autobuyAcc >= interval) {
         s.autobuyAcc = 0;
         this._autobuyPulse();
       }
@@ -998,6 +1141,8 @@
       totalBuys: s.totalBuys,
       lastRate: s.lastRate,
       graph: s.graph.slice(-400),
+      notation: s.notation || "mix",
+      theoriesSeen: !!s.theoriesSeen,
       stars: s.stars,
       starsTotal: s.starsTotal,
       achievements: s.achievements,
@@ -1049,9 +1194,14 @@
       if (typeof d.up.cheapX === "number") s.up.cheapX = d.up.cheapX;
     }
     if (d.muUp) {
-      if (typeof d.muUp.y === "number") s.muUp.y = d.muUp.y;
-      if (typeof d.muUp.dt === "number") s.muUp.dt = d.muUp.dt;
+      ["y", "dt", "auto", "cheapX", "theory", "startF"].forEach(function (k) {
+        if (typeof d.muUp[k] === "number") s.muUp[k] = d.muUp[k];
+      });
     }
+    if (d.notation === "sci" || d.notation === "eng" || d.notation === "mix") {
+      s.notation = d.notation;
+    }
+    s.theoriesSeen = !!d.theoriesSeen;
     s.autobuy = !!d.autobuy;
     s.autoPrestige = !!d.autoPrestige;
     if (typeof d.autoPrestigeThreshold === "number" && d.autoPrestigeThreshold > 0) {
@@ -1078,9 +1228,11 @@
       });
     }
     if (d.starShop && typeof d.starShop === "object") {
-      ["earlyAutobuy", "prodMult", "unlockW", "unlockA", "autoPrestige"].forEach(function (k) {
+      ["earlyAutobuy", "prodMult", "unlockW", "unlockA", "autoPrestige",
+       "buy10", "notation", "persistUp"].forEach(function (k) {
         if (typeof d.starShop[k] === "number") s.starShop[k] = d.starShop[k];
       });
+      if (s.starShop.prodMult > 3) s.starShop.prodMult = 3;
     }
     s.theories = mergeTheories(d.theories);
     // Stuck brand-new saves from before f started at 10.

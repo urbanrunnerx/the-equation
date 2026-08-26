@@ -1,13 +1,15 @@
 (function () {
   "use strict";
 
-  var SAVE_KEY = "the-equation-v1";
+  var SAVE_KEY = "the-equation-v2";
+  var SAVE_KEY_LEGACY = "the-equation-v1";
   var game = new Game();
   var tab = "equation";
   var lastPaint = 0;
   var canvas, ctx;
   var prestigeArmed = false;
   var rewriteArmed = false;
+  var publishArmed = null;
 
   function $(id) { return document.getElementById(id); }
 
@@ -39,16 +41,24 @@
   }
 
   /* ----- tabs ----- */
-  document.querySelectorAll(".tabs [data-tab]").forEach(function (btn) {
+  function setTab(name) {
+    tab = name;
+    document.querySelectorAll("[data-tab]").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-tab") === name);
+    });
+    document.querySelectorAll(".panel").forEach(function (p) {
+      p.classList.toggle("active", p.id === "panel-" + name);
+    });
+    if (name === "theories" && game.theoriesUnlocked() && !game.s.theoriesSeen) {
+      game.s.theoriesSeen = true;
+      game.checkAchievements();
+      save(false);
+    }
+    paint(true);
+  }
+  document.querySelectorAll("[data-tab]").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      tab = btn.getAttribute("data-tab");
-      document.querySelectorAll(".tabs [data-tab]").forEach(function (b) {
-        b.classList.toggle("active", b === btn);
-      });
-      document.querySelectorAll(".panel").forEach(function (p) {
-        p.classList.toggle("active", p.id === "panel-" + tab);
-      });
-      paint(true);
+      setTab(btn.getAttribute("data-tab"));
     });
   });
 
@@ -72,13 +82,27 @@
     return '<span data-term="' + id + '"' + cls + ">" + inner + "</span>";
   }
 
+  function varProductHTML(added, numeric) {
+    var ids = activeIds();
+    var inner = ids.map(function (id) {
+      var body = numeric
+        ? formatJS(game.varValue(id), 2)
+        : ("<i>" + Game.VAR_DEFS[id].name + "</i>");
+      return termSpan(id, body, added);
+    }).join("·");
+    if (!ids.length) inner = "1";
+    if (game.showPhi()) {
+      return "(" + inner + ")<span data-term=\"phi\"" +
+        ((added && added.indexOf("phi") >= 0 && motionOk()) ? ' class="write-in"' : "") +
+        "><sup>" + (numeric ? formatJS(game.phi(), 3) : "<i>φ</i>") + "</sup></span>";
+    }
+    return inner;
+  }
+
   function formulaMainHTML(added) {
     var parts = [termSpan("b", "<i>b</i>", added)];
-    if (game.showPhi()) parts.push(termSpan("phi", "<i>φ</i>", added));
+    parts.push(varProductHTML(added, false));
     if (game.showTau()) parts.push(termSpan("tau", "<i>τ</i>", added));
-    activeIds().forEach(function (id) {
-      parts.push(termSpan(id, "<i>" + Game.VAR_DEFS[id].name + "</i>", added));
-    });
     parts.push(termSpan("dt", "d<i>t</i>", added));
     return "<i>f</i>(<i>t</i>+d<i>t</i>) = <i>f</i>(<i>t</i>)·<i>e</i><sup>" + parts.join("·") + "</sup>";
   }
@@ -90,11 +114,8 @@
 
   function formulaSubHTML(added) {
     var parts = [termSpan("b", formatJS(game.s.b, 3), added)];
-    if (game.showPhi()) parts.push(termSpan("phi", formatJS(game.phi(), 3), added));
+    parts.push(varProductHTML(added, true));
     if (game.showTau()) parts.push(termSpan("tau", formatJS(game.tau(), 3), added));
-    activeIds().forEach(function (id) {
-      parts.push(termSpan(id, formatJS(game.varValue(id), 2), added));
-    });
     parts.push(termSpan("dt", formatJS(game.dtSpeed(), 3), added));
     return '<span data-term="f">' + fText() + "</span> · e<sup>" + parts.join(" · ") + "</sup>";
   }
@@ -108,7 +129,14 @@
     }
     set("f", fText());
     set("b", formatJS(game.s.b, 3));
-    if (game.showPhi()) set("phi", formatJS(game.phi(), 3));
+    if (game.showPhi()) {
+      var phiEl = sub.querySelector('[data-term="phi"]');
+      if (phiEl) {
+        var sup = phiEl.querySelector("sup");
+        if (sup) sup.textContent = formatJS(game.phi(), 3);
+        else phiEl.textContent = formatJS(game.phi(), 3);
+      }
+    }
     if (game.showTau()) set("tau", formatJS(game.tau(), 3));
     activeIds().forEach(function (id) { set(id, formatJS(game.varValue(id), 2)); });
     set("dt", formatJS(game.dtSpeed(), 3));
@@ -274,7 +302,8 @@
       }
     }
     var hover = game.hovered === id ? " hovered" : "";
-    var html = '<div class="var-row' + (locked ? " locked" : "") + hover + '" data-id="' + id + '">';
+    var has10 = !locked && game.s.starShop && game.s.starShop.buy10 > 0;
+    var html = '<div class="var-row' + (locked ? " locked" : "") + (has10 ? " has-10" : "") + hover + '" data-id="' + id + '">';
     html += '<div class="var-name">' + def.name + "</div>";
     html += '<div class="var-info">';
     if (locked) {
@@ -287,9 +316,14 @@
       html += "</div>";
     }
     html += "</div>";
-    html += '<div class="var-cost"><span class="n">' + (locked ? "—" : formatLog(cost)) + '</span>cost</div>';
-    html += '<button class="btn" data-buy="1" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy 1</button>";
-    html += '<button class="btn primary" data-buy="max" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy max</button>";
+    if (!locked) {
+      html += '<div class="var-cost"><span class="n">' + formatLog(cost) + "</span>cost</div>";
+      html += '<button class="btn" data-buy="1" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy 1</button>";
+      if (game.s.starShop && game.s.starShop.buy10 > 0) {
+        html += '<button class="btn" data-buy="10" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy 10</button>";
+      }
+      html += '<button class="btn primary" data-buy="max" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy max</button>";
+    }
     html += "</div>";
     return html;
   }
@@ -301,6 +335,8 @@
     });
     var nxt = game.nextLocked();
     if (nxt) ids.push(nxt);
+    var pending = game.starGatedPending();
+    if (pending.length && ids.indexOf(pending[0]) < 0) ids.push(pending[0]);
     into.innerHTML = ids.map(function (id) { return varRow(id, compact); }).join("");
   }
 
@@ -310,7 +346,8 @@
       if (!t) return;
       var id = t.getAttribute("data-id");
       game.hovered = id;
-      var n = game.buy(id, t.getAttribute("data-buy") === "max");
+      var mode = t.getAttribute("data-buy");
+      var n = game.buy(id, mode === "max" ? "max" : (mode === "10" ? 10 : false));
       if (n) save(false);
       paint(true);
       if (n) punchBuy(id);
@@ -347,7 +384,7 @@
       html += '<div class="up-row">';
       html += '<div class="var-name" style="font-size:16px;letter-spacing:0.04em;font-style:normal;font-family:var(--sans)">' + (u.id === "dt" ? "dt" : "x′") + "</div>";
       html += '<div class="var-info"><div class="val">' + u.name + '</div><div class="eff">' + u.desc + " · " + u.effect + "</div></div>";
-      html += '<div class="var-cost"><span class="n">' + (maxed ? "max" : formatLog(u.cost)) + "</span>cost</div>";
+      html += '<div class="var-cost"><span class="n">' + (maxed ? "✓" : formatLog(u.cost)) + "</span>" + (maxed ? "owned" : "cost") + "</div>";
       html += '<span></span>';
       html += '<button class="btn primary" data-up="' + u.id + '"' + (u.can && !maxed ? "" : " disabled") + ">Buy</button>";
       html += "</div>";
@@ -360,18 +397,17 @@
       $("mu-upgrades").innerHTML = '<p style="color:var(--ink-mute);font-size:13px">Complete a prestige to unlock lemmas bought with μ.</p>';
       return;
     }
-    var items = [
-      { id: "y", name: "Lemma of y", desc: "Each level adds to y and multiplies its contribution.", effect: "y × " + formatJS(game.varValue("y"), 2) },
-      { id: "dt", name: "Lemma of dt", desc: "Permanently adds to dt.", effect: "dt = " + formatJS(game.dtSpeed(), 3) }
-    ];
     var html = "";
-    items.forEach(function (u) {
+    Game.MU_UPS.forEach(function (u) {
+      var lv = game.s.muUp[u.id] || 0;
       var cost = game.muUpgradeCost(u.id);
-      var can = game.s.mu >= cost;
+      var maxed = !isFinite(cost) || lv >= u.max;
+      var can = !maxed && game.s.mu >= cost;
       html += '<div class="up-row">';
-      html += '<div class="var-name">' + (u.id === "y" ? "y" : "dt") + "</div>";
-      html += '<div class="var-info"><div class="val">' + u.name + " <span style='color:var(--ink-mute)'>lv " + game.s.muUp[u.id] + '</span></div><div class="eff">' + u.desc + "</div></div>";
-      html += '<div class="var-cost"><span class="n">' + formatJS(cost, 2) + "</span>μ</div>";
+      html += '<div class="var-name" style="font-size:16px;font-style:normal;font-family:var(--sans)">' + u.short + "</div>";
+      html += '<div class="var-info"><div class="val">' + u.name + " <span style='color:var(--ink-mute)'>lv " + lv + " / " + u.max + "</span></div>";
+      html += '<div class="eff">' + u.desc + "</div></div>";
+      html += '<div class="var-cost"><span class="n">' + (maxed ? "✓" : formatJS(cost, 2)) + "</span>" + (maxed ? "owned" : "μ") + "</div>";
       html += "<span></span>";
       html += '<button class="btn primary" data-mu="' + u.id + '"' + (can ? "" : " disabled") + ">Buy</button>";
       html += "</div>";
@@ -414,7 +450,7 @@
   function rewriteProgress() {
     if (game.canRewrite()) return 1;
     if (!game.rewriteUnlocked()) {
-      return Math.max(0, Math.min(0.85, game.s.prestiges / 3 * 0.7 + Math.max(0, (game.s.b - 1) / 2.6) * 0.3));
+      return Math.max(0, Math.min(0.85, game.s.prestiges / 8 * 0.7 + Math.max(0, (game.s.b - 1) / 8) * 0.3));
     }
     var d = game.dphi();
     return Math.max(0, Math.min(1, d / 0.45));
@@ -452,12 +488,12 @@
     $("r-bar").style.width = (rewriteProgress() * 100).toFixed(1) + "%";
     $("btn-rewrite").disabled = !can;
     if (!game.rewriteUnlocked()) {
-      $("r-hint").textContent = "Unlocks after 3 prestiges and b ≥ 2.6. Currently " +
+      $("r-hint").textContent = "Unlocks after 8 prestiges and b ≥ 8. Currently " +
         game.s.prestiges + " prestige" + (game.s.prestiges === 1 ? "" : "s") + ", b = " + formatJS(game.s.b, 3) + ".";
     } else if (!can) {
-      $("r-hint").textContent = "Raise b a little further. Δφ opens around 0.45 (now " + formatJS(dphi, 3) + ").";
+      $("r-hint").textContent = "Raise b further. Δφ opens at 0.45 (now " + formatJS(dphi, 3) + "). The floor is not free at b = 8.";
     } else {
-      $("r-hint").textContent = "Rewriting returns b to 1 and adds φ. Autobuy and μ lemmas stay. Theories open after the first rewrite.";
+      $("r-hint").textContent = "Rewriting returns b to 1 and raises φ, the power on Π. Autobuy and μ lemmas stay. Theories open after the first rewrite.";
     }
   }
 
@@ -488,7 +524,7 @@
       shopHtml += '<div class="var-info"><div class="val">' + label + '</div><div class="eff">' + item.desc;
       if (item.id === "prodMult") shopHtml += "  ·  ×" + formatJS(game.starMult(), 2);
       shopHtml += "</div></div>";
-      shopHtml += '<div class="var-cost"><span class="n">' + (maxed ? "max" : String(cost)) + "</span>stars</div>";
+      shopHtml += '<div class="var-cost"><span class="n">' + (maxed ? "✓" : String(cost)) + "</span>" + (maxed ? "owned" : "stars") + "</div>";
       shopHtml += "<span></span>";
       shopHtml += '<button class="btn primary" data-star="' + item.id + '"' + (can ? "" : " disabled") + ">Buy</button>";
       shopHtml += "</div>";
@@ -500,6 +536,12 @@
     if (apOn) {
       $("auto-prestige").checked = !!s.autoPrestige;
       $("auto-p-thr").value = String(s.autoPrestigeThreshold || 1);
+    }
+    var notOn = !!(s.starShop && s.starShop.notation > 0);
+    $("notation-wrap").hidden = !notOn;
+    if (notOn) {
+      $("notation-sel").value = s.notation || "mix";
+      if (typeof setNotation === "function") setNotation(s.notation || "mix");
     }
   }
 
@@ -571,9 +613,9 @@
         thUpRow("recurrence", "c4", "c₄", "Linear boost to the step", "ρ");
       $("th-up-dual").innerHTML =
         thUpRow("dual", "a1", "a₁", "λ production (costs λ)", "λ") +
-        thUpRow("dual", "a2", "a₂", "1.28^{a₂} on λ (costs λ)", "λ") +
+        thUpRow("dual", "a2", "a₂", "1.25^{a₂} on λ (costs λ)", "λ") +
         thUpRow("dual", "a3", "a₃", "σ conversion from λ (costs σ)", "σ") +
-        thUpRow("dual", "a4", "a₄", "1.22^{a₄} on σ (costs σ)", "σ");
+        thUpRow("dual", "a4", "a₄", "1.2^{a₄} on σ (costs σ)", "σ");
     }
   }
 
@@ -593,7 +635,7 @@
     ctx.fillRect(0, 0, w, h);
 
     var pts = game.s.graph;
-    var padL = 42, padR = 10, padT = 10, padB = 22;
+    var padL = 56, padR = 10, padT = 12, padB = 22;
     var gw = w - padL - padR, gh = h - padT - padB;
 
     ctx.strokeStyle = "#2a2822";
@@ -608,8 +650,9 @@
     ctx.font = "10px Eq Sans, sans-serif";
     ctx.fillText("t", padL + gw - 8, padT + gh + 16);
     ctx.save();
-    ctx.translate(12, padT + gh / 2);
+    ctx.translate(14, padT + gh / 2);
     ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "center";
     ctx.fillText("log10 f", 0, 0);
     ctx.restore();
 
@@ -637,6 +680,19 @@
     ctx.strokeStyle = "#d4af4a";
     ctx.lineWidth = 1.6;
     ctx.stroke();
+
+    ctx.fillStyle = "rgba(108, 102, 92, 0.85)";
+    ctx.font = "9px Eq Sans, sans-serif";
+    var marked = 0;
+    for (var k = 1; k < pts.length && marked < 6; k++) {
+      if (pts[k].l < pts[k - 1].l - 0.15) {
+        var dx = padL + ((pts[k].t - t0) / (t1 - t0)) * gw;
+        var dy = padT + gh - (pts[k].l / l1) * gh;
+        ctx.fillText("spend", dx + 2, dy + 10);
+        marked++;
+        k += 8;
+      }
+    }
 
     var grd = ctx.createLinearGradient(0, padT, 0, padT + gh);
     grd.addColorStop(0, "rgba(212,175,74,0.18)");
@@ -673,6 +729,11 @@
     $("meta-tau").hidden = !game.showTau();
     paintFormula();
     checkDecade();
+    var eqHint = $("eq-hint");
+    if (eqHint) {
+      eqHint.hidden = !((s.prestiges || 0) === 0 && (s.rewrites || 0) === 0 && (s.vars.x || 0) === 0);
+    }
+    if (typeof setNotation === "function") setNotation(s.notation || "mix");
     $("foot-rate").textContent = "d(log₁₀ f)/dt = " + formatJS(game.displayRate(), 3);
 
     $("btn-prestige-mini").disabled = !game.canPrestige();
@@ -776,6 +837,14 @@
     if (isFinite(n) && n > 0) game.s.autoPrestigeThreshold = n;
     save(false);
   });
+  $("notation-sel").addEventListener("change", function () {
+    var v = $("notation-sel").value;
+    if (v === "sci" || v === "eng" || v === "mix") {
+      game.s.notation = v;
+      if (typeof setNotation === "function") setNotation(v);
+      paint(true); save(false);
+    }
+  });
 
   $("panel-theories").addEventListener("click", function (ev) {
     var act = ev.target.closest("[data-activate]");
@@ -792,12 +861,31 @@
       return;
     }
   });
-  $("btn-pub-recurrence").addEventListener("click", function () {
-    if (game.publishTheory("recurrence")) { paint(true); save(true); }
+  function openPublishModal(tid) {
+    if (!game.canPublish(tid)) return;
+    publishArmed = tid;
+    var gain = game.theoryPubValue(tid);
+    var th = game.s.theories[tid];
+    var next = th.tau > 0 ? th.tau * (1 + 0.28 * gain) : gain;
+    $("m-pub-gain").textContent = "τₙ → " + formatJS(next, 3);
+    $("m-pub-body").textContent = tid === "recurrence"
+      ? "ρ and c₁–c₄ return to their start. Published τ₁ stays."
+      : "λ, σ and aᵢ return to their start. Published τ₂ stays.";
+    $("modal-publish").classList.add("open");
+  }
+  function doPublish() {
+    $("modal-publish").classList.remove("open");
+    var tid = publishArmed;
+    publishArmed = null;
+    if (tid && game.publishTheory(tid)) { paint(true); save(true); }
+  }
+  $("btn-pub-recurrence").addEventListener("click", function () { openPublishModal("recurrence"); });
+  $("btn-pub-dual").addEventListener("click", function () { openPublishModal("dual"); });
+  $("pub-cancel").addEventListener("click", function () {
+    $("modal-publish").classList.remove("open");
+    publishArmed = null;
   });
-  $("btn-pub-dual").addEventListener("click", function () {
-    if (game.publishTheory("dual")) { paint(true); save(true); }
-  });
+  $("pub-go").addEventListener("click", doPublish);
 
   function openPrestigeModal() {
     if (!game.canPrestige()) return;
@@ -868,16 +956,25 @@
     $("modal-reset").classList.add("open");
   });
   $("r-cancel").addEventListener("click", function () { $("modal-reset").classList.remove("open"); });
+  document.querySelectorAll(".modal").forEach(function (m) {
+    m.addEventListener("click", function (ev) {
+      if (ev.target === m) closeModals();
+    });
+  });
   $("r-go").addEventListener("click", function () {
     $("modal-reset").classList.remove("open");
     game.hardReset();
-    try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    try {
+      localStorage.removeItem(SAVE_KEY);
+      localStorage.removeItem(SAVE_KEY_LEGACY);
+    } catch (e) {}
     hushJuice(true);
     paint(true);
   });
 
   window.addEventListener("keydown", function (ev) {
-    if (ev.target && (ev.target.tagName === "TEXTAREA" || ev.target.tagName === "INPUT")) return;
+    if (ev.key === "Escape") { closeModals(); return; }
+    if (ev.target && (ev.target.tagName === "TEXTAREA" || ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT")) return;
     var k = ev.key;
     if (k === "m" || k === "M") {
       var id = game.hovered || "x";
@@ -888,26 +985,43 @@
     } else if (k === "r" || k === "R") {
       if (rewriteArmed) doRewrite();
       else openRewriteModal();
-    } else if (k === "1") document.querySelector("[data-tab=equation]").click();
-    else if (k === "2") document.querySelector("[data-tab=variables]").click();
-    else if (k === "3") document.querySelector("[data-tab=upgrades]").click();
-    else if (k === "4") document.querySelector("[data-tab=prestige]").click();
-    else if (k === "5") document.querySelector("[data-tab=stars]").click();
-    else if (k === "6") document.querySelector("[data-tab=theories]").click();
-    else if (k === "7") document.querySelector("[data-tab=stats]").click();
+    } else if (k === "1") setTab("equation");
+    else if (k === "2") setTab("variables");
+    else if (k === "3") setTab("upgrades");
+    else if (k === "4") setTab("prestige");
+    else if (k === "5") setTab("stars");
+    else if (k === "6") setTab("theories");
+    else if (k === "7") setTab("stats");
   });
 
   /* ----- save ----- */
+  function closeModals() {
+    document.querySelectorAll(".modal.open").forEach(function (m) {
+      m.classList.remove("open");
+    });
+    prestigeArmed = false;
+    rewriteArmed = false;
+    publishArmed = null;
+  }
+
   function save(force) {
     try { localStorage.setItem(SAVE_KEY, game.serialize()); } catch (e) {}
   }
 
   function load() {
-    var raw;
+    var raw = null;
+    var fromLegacy = false;
     try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { raw = null; }
+    if (!raw) {
+      try { raw = localStorage.getItem(SAVE_KEY_LEGACY); } catch (e2) { raw = null; }
+      fromLegacy = !!raw;
+    }
     if (!raw) return;
     var last = game.loadJSON(raw);
     if (!last) return;
+    if (fromLegacy) {
+      save(true);
+    }
     var elapsed = (Date.now() - last) / 1000;
     var recap = game.applyOffline(elapsed);
     if (recap && recap.grant >= 2) {

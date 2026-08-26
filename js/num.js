@@ -154,11 +154,33 @@
     return new Num(j.m, j.l || 0);
   };
 
+  var notationMode = "mix"; // mix | sci | eng
+  function setNotation(mode) {
+    notationMode = (mode === "sci" || mode === "eng") ? mode : "mix";
+  }
+
+  function sciStr(log10, places) {
+    var exp = Math.floor(log10 + 1e-12);
+    var mant = Math.pow(10, log10 - exp);
+    if (mant >= 9.995) { mant = 1; exp += 1; }
+    if (mant < 1 && exp > -Infinity) { mant *= 10; exp -= 1; }
+    return mant.toFixed(places) + "e" + exp.toString();
+  }
+
+  function engStr(log10, places) {
+    var exp = Math.floor(log10 + 1e-12);
+    var adj = ((exp % 3) + 3) % 3;
+    var e3 = exp - adj;
+    var mant = Math.pow(10, log10 - e3);
+    if (mant >= 999.5) { mant = 1; e3 += 3; }
+    return mant.toFixed(places) + "e" + e3.toString();
+  }
+
   /**
    * Format a layer-0 log10, or a Num.
-   *  < 1e6        locale with commas
-   *  then         scientific 1.23e9
-   *  huge exp     ee notation: ee3 = 10^(10^3)
+   *  mix: < 1e6 locale, then scientific, then ee
+   *  sci: scientific from 1e3
+   *  eng: engineering (exp multiple of 3) from 1e3
    */
   function formatLog(log10, places) {
     if (places == null) places = 2;
@@ -172,6 +194,13 @@
       var small = Math.pow(10, log10);
       return small.toFixed(Math.min(3, places + 1));
     }
+    if (log10 >= 1e4) {
+      /* fall through to ee below after sci/eng small-range */
+    } else if (notationMode === "sci" && log10 >= 3) {
+      return sciStr(log10, places);
+    } else if (notationMode === "eng" && log10 >= 3) {
+      return engStr(log10, places);
+    }
     if (log10 < 6) {
       var n = Math.pow(10, log10);
       if (log10 < 3) {
@@ -182,13 +211,7 @@
     }
     // scientific until exponent itself is huge
     if (log10 < 1e4) {
-      var exp = Math.floor(log10 + 1e-12);
-      var mant = Math.pow(10, log10 - exp);
-      if (mant >= 9.995) {
-        mant = 1;
-        exp += 1;
-      }
-      return mant.toFixed(places) + "e" + exp.toString();
+      return sciStr(log10, places);
     }
     // eeX where X = log10(log10(value)) = log10(log10)
     var ee = Math.log10(log10);
@@ -244,4 +267,5 @@
   root.formatNum = formatNum;
   root.formatJS = formatJS;
   root.formatTime = formatTime;
+  root.setNotation = setNotation;
 })(typeof window !== "undefined" ? window : globalThis);

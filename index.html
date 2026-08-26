@@ -13,9 +13,9 @@
       <div class="currencies">
         <div class="cur"><span class="k">t</span><span class="v" id="top-t">0.00</span></div>
         <div class="cur"><span class="k">b</span><span class="v" id="top-b">1.00</span></div>
-        <div class="cur"><span class="k">μ</span><span class="v" id="top-mu">0</span></div>
-        <div class="cur" id="cur-phi" hidden><span class="k">φ</span><span class="v" id="top-phi">1.00</span></div>
-        <div class="cur" id="cur-tau" hidden><span class="k">τ</span><span class="v" id="top-tau">1.00</span></div>
+        <div class="cur"><span class="k greek">μ</span><span class="v" id="top-mu">0</span></div>
+        <div class="cur" id="cur-phi" hidden><span class="k greek">φ</span><span class="v" id="top-phi">1.00</span></div>
+        <div class="cur" id="cur-tau" hidden><span class="k greek">τ</span><span class="v" id="top-tau">1.00</span></div>
         <div class="cur" id="cur-stars" hidden><span class="k">★</span><span class="v" id="top-stars">0</span></div>
         <div class="cur"><span class="k">dt</span><span class="v" id="top-dt">0.075</span></div>
       </div>
@@ -59,10 +59,12 @@
               </label>
             </div>
             <p class="ee-help">Notation: 1.23e9 = 1.23×10<sup>9</sup>. &nbsp; ee3 = 10<sup>10<sup>3</sup></sup> = 10<sup>1000</sup>.</p>
+            <p class="eq-hint" id="eq-hint">Buy x. Spending divides f, then it grows again.</p>
           </div>
           <div class="graph-card">
             <h3>log<sub>10</sub> f &nbsp; vs &nbsp; t &nbsp; · &nbsp; this run</h3>
             <canvas id="graph" width="640" height="280"></canvas>
+            <p class="graph-note">Dips are purchases — spending divides f.</p>
           </div>
         </div>
         <div class="eq-vars board" id="eq-vars"></div>
@@ -118,7 +120,7 @@
           </div>
           <div class="formula-card p-card span2" id="rewrite-card">
             <h2>Rewrite</h2>
-            <p id="rewrite-blurb">A second change of paper. Resets t, f, variables, f-upgrades, and <i>b</i> (returns to 1). μ lemmas, stars, theories, and φ remain. φ multiplies the exponent.</p>
+            <p id="rewrite-blurb">A second change of paper. Resets t, f, variables, f-upgrades, and <i>b</i> (returns to 1). μ lemmas, stars, theories, and φ remain. After the first rewrite, φ is the power on the variable product: e<sup>b·Π<sup>φ</sup>·τ·dt</sup>.</p>
             <div class="p-stats" id="rewrite-stats">
               <div class="p-stat"><div class="k">Δφ</div><div class="v" id="dphi-val">—</div></div>
               <div class="p-stat"><div class="k">φ after</div><div class="v" id="phi-after">1.00</div></div>
@@ -161,15 +163,38 @@
                 <input type="number" id="auto-p-thr" min="0.2" max="50" step="0.1" value="1" />
               </label>
             </div>
+            <div id="notation-wrap" class="auto-p-wrap" hidden>
+              <label class="thr-lab">Notation
+                <select id="notation-sel">
+                  <option value="mix">Mixed</option>
+                  <option value="sci">Scientific</option>
+                  <option value="eng">Engineering</option>
+                </select>
+              </label>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- THEORIES -->
       <section class="panel" id="panel-theories">
-        <div id="theories-locked" class="formula-card p-card">
-          <h2>Theory workshop</h2>
-          <p>Rewrite the equation once to open a side-desk of smaller equations. Each theory produces its own τₙ; the main exponent is multiplied by τ = Π(1 + τₙ).</p>
+        <div id="theories-locked">
+          <div class="formula-card p-card">
+            <h2>Theory workshop</h2>
+            <p>Rewrite the equation once to open this desk. Two smaller equations tick here; each produces a τₙ. Main τ = (1+τ₁)(1+τ₂).</p>
+          </div>
+          <div class="theory-wrap theory-teaser">
+            <div class="formula-card p-card theory-card locked-preview">
+              <h2>Recurrence</h2>
+              <p class="th-eq">ρ<sub>n+1</sub> = ρ<sub>n</sub> + c<sub>1</sub>·c<sub>2</sub>·1.28<sup>c<sub>3</sub></sup>·(1+0.35 c<sub>4</sub>)</p>
+              <p>One currency ρ buys c<sub>1</sub>–c<sub>4</sub>. Publish for τ₁.</p>
+            </div>
+            <div class="formula-card p-card theory-card locked-preview">
+              <h2>Coupled rates</h2>
+              <p class="th-eq">dλ/dt = a<sub>1</sub>·1.25<sup>a<sub>2</sub></sup> &nbsp; · &nbsp; dσ/dt ∝ λ·a<sub>3</sub>·1.2<sup>a<sub>4</sub></sup></p>
+              <p>λ feeds σ. τ₂ comes from σ. Publish for τ₂.</p>
+            </div>
+          </div>
         </div>
         <div id="theories-open" hidden>
           <div class="board-head theory-head">
@@ -185,7 +210,7 @@
                 <h2>Recurrence</h2>
                 <button class="btn" data-activate="recurrence" id="btn-act-recurrence">Active</button>
               </div>
-              <p class="th-eq">ρ<sub>n+1</sub> = ρ<sub>n</sub> + c<sub>1</sub>·c<sub>2</sub>·1.28<sup>c<sub>3</sub></sup></p>
+              <p class="th-eq">ρ<sub>n+1</sub> = ρ<sub>n</sub> + c<sub>1</sub>·c<sub>2</sub>·1.28<sup>c<sub>3</sub></sup>·(1+0.35 c<sub>4</sub>)</p>
               <div class="p-stats th-stats">
                 <div class="p-stat"><div class="k">ρ</div><div class="v" id="th-rho">0</div></div>
                 <div class="p-stat"><div class="k">max ρ</div><div class="v" id="th-maxrho">0</div></div>
@@ -201,7 +226,7 @@
                 <h2>Coupled rates</h2>
                 <button class="btn" data-activate="dual" id="btn-act-dual">Set active</button>
               </div>
-              <p class="th-eq">dλ/dt = a<sub>1</sub>·1.28<sup>a<sub>2</sub></sup> &nbsp; · &nbsp; dσ/dt ∝ λ·a<sub>3</sub></p>
+              <p class="th-eq">dλ/dt = a<sub>1</sub>·1.25<sup>a<sub>2</sub></sup> &nbsp; · &nbsp; dσ/dt ∝ λ·a<sub>3</sub>·1.2<sup>a<sub>4</sub></sup></p>
               <div class="p-stats th-stats">
                 <div class="p-stat"><div class="k">λ</div><div class="v" id="th-lam">0</div></div>
                 <div class="p-stat"><div class="k">σ</div><div class="v" id="th-sig">0</div></div>
@@ -256,6 +281,18 @@
       <div class="modal-actions">
         <button class="btn" id="rw-cancel">Remain</button>
         <button class="btn primary" id="rw-go">Rewrite</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-publish">
+    <div class="modal-card">
+      <h2>Publish</h2>
+      <p>Reset this theory and raise its τₙ. You will gain <b id="m-pub-gain"></b>.</p>
+      <p style="margin-top:8px" id="m-pub-body">Currencies and coefficients of this theory return to their start. Published τ stays.</p>
+      <div class="modal-actions">
+        <button class="btn" id="pub-cancel">Remain</button>
+        <button class="btn primary" id="pub-go">Publish</button>
       </div>
     </div>
   </div>
