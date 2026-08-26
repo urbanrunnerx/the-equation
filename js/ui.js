@@ -57,26 +57,206 @@
     return Game.VAR_ORDER.filter(function (id) { return game.isUnlocked(id); });
   }
 
-  function formulaMain() {
-    var ids = activeIds();
-    var head = ["<i>b</i>"];
-    if (game.showPhi()) head.push("<i>φ</i>");
-    if (game.showTau()) head.push("<i>τ</i>");
-    var exp = head.concat(ids.map(function (id) {
-      return "<i>" + Game.VAR_DEFS[id].name + "</i>";
-    })).concat(["d<i>t</i>"]).join("·");
-    return "<i>f</i>(<i>t</i>+d<i>t</i>) = <i>f</i>(<i>t</i>)·<i>e</i><sup>" + exp + "</sup>";
+  function formulaTerms() {
+    var terms = ["b"];
+    if (game.showPhi()) terms.push("phi");
+    if (game.showTau()) terms.push("tau");
+    activeIds().forEach(function (id) { terms.push(id); });
+    terms.push("dt");
+    return terms;
   }
 
-  function formulaSub() {
-    var ids = activeIds();
-    var f = formatLog(game.s.fLog);
-    var parts = [formatJS(game.s.b, 3)];
-    if (game.showPhi()) parts.push(formatJS(game.phi(), 3));
-    if (game.showTau()) parts.push(formatJS(game.tau(), 3));
-    ids.forEach(function (id) { parts.push(formatJS(game.varValue(id), 2)); });
-    parts.push(formatJS(game.dtSpeed(), 3));
-    return f + " · e<sup>" + parts.join(" · ") + "</sup>";
+  function termSpan(id, inner, added) {
+    var cls = "";
+    if (added && added.indexOf(id) >= 0 && motionOk()) cls = ' class="write-in"';
+    return '<span data-term="' + id + '"' + cls + ">" + inner + "</span>";
+  }
+
+  function formulaMainHTML(added) {
+    var parts = [termSpan("b", "<i>b</i>", added)];
+    if (game.showPhi()) parts.push(termSpan("phi", "<i>φ</i>", added));
+    if (game.showTau()) parts.push(termSpan("tau", "<i>τ</i>", added));
+    activeIds().forEach(function (id) {
+      parts.push(termSpan(id, "<i>" + Game.VAR_DEFS[id].name + "</i>", added));
+    });
+    parts.push(termSpan("dt", "d<i>t</i>", added));
+    return "<i>f</i>(<i>t</i>+d<i>t</i>) = <i>f</i>(<i>t</i>)·<i>e</i><sup>" + parts.join("·") + "</sup>";
+  }
+
+  function fText() {
+    var s = game.s;
+    return s.fLayer ? formatNum(new Num(s.fLog, s.fLayer)) : formatLog(s.fLog);
+  }
+
+  function formulaSubHTML(added) {
+    var parts = [termSpan("b", formatJS(game.s.b, 3), added)];
+    if (game.showPhi()) parts.push(termSpan("phi", formatJS(game.phi(), 3), added));
+    if (game.showTau()) parts.push(termSpan("tau", formatJS(game.tau(), 3), added));
+    activeIds().forEach(function (id) {
+      parts.push(termSpan(id, formatJS(game.varValue(id), 2), added));
+    });
+    parts.push(termSpan("dt", formatJS(game.dtSpeed(), 3), added));
+    return '<span data-term="f">' + fText() + "</span> · e<sup>" + parts.join(" · ") + "</sup>";
+  }
+
+  function updateFormulaSubNumbers() {
+    var sub = $("formula-sub");
+    if (!sub) return;
+    function set(term, text) {
+      var el = sub.querySelector('[data-term="' + term + '"]');
+      if (el) el.textContent = text;
+    }
+    set("f", fText());
+    set("b", formatJS(game.s.b, 3));
+    if (game.showPhi()) set("phi", formatJS(game.phi(), 3));
+    if (game.showTau()) set("tau", formatJS(game.tau(), 3));
+    activeIds().forEach(function (id) { set(id, formatJS(game.varValue(id), 2)); });
+    set("dt", formatJS(game.dtSpeed(), 3));
+  }
+
+  var paintedTerms = null;
+
+  function paintFormula() {
+    var terms = formulaTerms();
+    var sig = terms.join(",");
+    var prev = paintedTerms;
+    if (prev === sig) {
+      updateFormulaSubNumbers();
+      return;
+    }
+    var added = [];
+    if (prev !== null) {
+      var old = prev.split(",");
+      for (var i = 0; i < terms.length; i++) {
+        if (old.indexOf(terms[i]) < 0) added.push(terms[i]);
+      }
+    }
+    paintedTerms = sig;
+    $("formula-main").innerHTML = formulaMainHTML(added);
+    $("formula-sub").innerHTML = formulaSubHTML(added);
+    if (added.length && motionOk()) {
+      setTimeout(function () {
+        var nodes = document.querySelectorAll("#formula-main .write-in, #formula-sub .write-in");
+        for (var j = 0; j < nodes.length; j++) {
+          nodes[j].classList.remove("write-in");
+        }
+      }, 1550);
+    }
+  }
+
+  /* ----- juice ----- */
+  function motionOk() {
+    return !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  var juiceReady = false;
+  var lastDecade = { layer: 0, d: 0 };
+  var varFlashUntil = {};
+
+  function hushJuice(rebuildFormula) {
+    juiceReady = false;
+    if (rebuildFormula) paintedTerms = null;
+  }
+
+  function decadeState() {
+    return { layer: game.s.fLayer || 0, d: Math.floor(game.s.fLog) };
+  }
+
+  function retriggerClass(el, cls) {
+    if (!el) return;
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  }
+
+  function punchBuy(id) {
+    if (motionOk()) {
+      retriggerClass($("f-value"), "flinch");
+      var sel = '#formula-main [data-term="' + id + '"], #formula-sub [data-term="' + id + '"]';
+      var nodes = document.querySelectorAll(sel);
+      for (var i = 0; i < nodes.length; i++) retriggerClass(nodes[i], "lit");
+      setTimeout(function () {
+        var n2 = document.querySelectorAll(sel);
+        for (var k = 0; k < n2.length; k++) n2[k].classList.remove("lit");
+      }, 600);
+    }
+    varFlashUntil[id] = performance.now() + 480;
+    applyVarFlashes();
+  }
+
+  function applyVarFlashes() {
+    var now = performance.now();
+    Object.keys(varFlashUntil).forEach(function (id) {
+      if (varFlashUntil[id] <= now) {
+        delete varFlashUntil[id];
+        var stale = document.querySelectorAll('.var-row[data-id="' + id + '"].flash');
+        for (var s = 0; s < stale.length; s++) stale[s].classList.remove("flash");
+        return;
+      }
+      var rows = document.querySelectorAll('.var-row[data-id="' + id + '"]');
+      for (var i = 0; i < rows.length; i++) {
+        if (!rows[i].classList.contains("flash")) {
+          if (motionOk()) retriggerClass(rows[i], "flash");
+          else rows[i].classList.add("flash");
+        }
+      }
+    });
+  }
+
+  function anyVarFlash() {
+    var now = performance.now();
+    var any = false;
+    Object.keys(varFlashUntil).forEach(function (id) {
+      if (varFlashUntil[id] > now) any = true;
+      else delete varFlashUntil[id];
+    });
+    return any;
+  }
+
+  function spawnDecadeFloat(up) {
+    if (!motionOk()) return;
+    var block = $("f-value") && $("f-value").parentNode;
+    if (!block) return;
+    var el = document.createElement("div");
+    el.className = "decade-float" + (up ? "" : " drop");
+    el.textContent = up ? "+1 decade" : "−1 decade";
+    block.appendChild(el);
+    setTimeout(function () { el.remove(); }, 1200);
+  }
+
+  function pendingResetEvent() {
+    var ev = game.events;
+    for (var i = 0; i < ev.length; i++) {
+      var t = ev[i].type;
+      if (t === "prestige" || t === "rewrite" || t === "reset") return true;
+    }
+    return false;
+  }
+
+  function checkDecade() {
+    var cur = decadeState();
+    if (!juiceReady || pendingResetEvent()) {
+      lastDecade = cur;
+      juiceReady = true;
+      return;
+    }
+    if (cur.layer !== lastDecade.layer) {
+      lastDecade = cur;
+      return;
+    }
+    var delta = cur.d - lastDecade.d;
+    lastDecade = cur;
+    if (!delta) return;
+    var fv = $("f-value");
+    if (delta > 0) {
+      fv.classList.remove("drop");
+      if (motionOk()) retriggerClass(fv, "decade-pulse");
+      spawnDecadeFloat(true);
+    } else {
+      fv.classList.add("drop");
+      if (motionOk()) retriggerClass(fv, "decade-pulse");
+      spawnDecadeFloat(false);
+    }
   }
 
   /* ----- variables ----- */
@@ -137,6 +317,7 @@
       var n = game.buy(id, t.getAttribute("data-buy") === "max");
       if (n) save(false);
       paint(true);
+      if (n) punchBuy(id);
     });
     root.addEventListener("mouseover", function (ev) {
       var row = ev.target.closest(".var-row");
@@ -487,7 +668,7 @@
     $("cur-tau").hidden = !game.showTau();
     $("cur-stars").hidden = !game.showStars();
 
-    $("f-value").textContent = s.fLayer ? formatNum(new Num(s.fLog, s.fLayer)) : formatLog(s.fLog);
+    $("f-value").textContent = fText();
     $("growth").textContent = "+" + formatJS(game.growthRate(), 2) + " decades / s";
     $("t-value").textContent = formatTime(s.t);
     $("b-value").textContent = formatJS(s.b, 3);
@@ -496,8 +677,8 @@
     $("tau-value").textContent = formatJS(game.tau(), 3);
     $("meta-phi").hidden = !game.showPhi();
     $("meta-tau").hidden = !game.showTau();
-    $("formula-main").innerHTML = formulaMain();
-    $("formula-sub").innerHTML = formulaSub();
+    paintFormula();
+    checkDecade();
     $("foot-rate").textContent = "d(log₁₀ f)/dt = " + formatJS(game.growthRate(), 3);
 
     $("btn-prestige-mini").disabled = !game.canPrestige();
@@ -517,6 +698,7 @@
     if (force) {
       renderVars($("eq-vars"), true);
       renderVars($("var-table"), false);
+      applyVarFlashes();
       renderUpgrades();
       renderPrestige();
       renderStars();
@@ -528,8 +710,15 @@
       paint._acc += 0.05;
       if (paint._acc >= 0.28) {
         paint._acc = 0;
-        if (tab === "equation") renderVars($("eq-vars"), true);
-        if (tab === "variables") renderVars($("var-table"), false);
+        var flashing = anyVarFlash();
+        if (tab === "equation") {
+          if (flashing) applyVarFlashes();
+          else renderVars($("eq-vars"), true);
+        }
+        if (tab === "variables") {
+          if (flashing) applyVarFlashes();
+          else renderVars($("var-table"), false);
+        }
         if (tab === "upgrades") renderUpgrades();
         if (tab === "prestige") renderPrestige();
         if (tab === "stars") renderStars();
@@ -632,6 +821,7 @@
     prestigeArmed = false;
     if (game.prestige()) {
       save(true);
+      hushJuice();
       paint(true);
     }
   }
@@ -646,6 +836,7 @@
     rewriteArmed = false;
     if (game.rewrite()) {
       save(true);
+      hushJuice();
       paint(true);
     }
   }
@@ -678,6 +869,7 @@
     if (!raw) { toast("Paste a save JSON first."); return; }
     if (game.loadJSON(raw)) {
       save(true);
+      hushJuice(true);
       paint(true);
       toast("Save imported.");
     } else toast("Could not read that save.");
@@ -690,6 +882,7 @@
     $("modal-reset").classList.remove("open");
     game.hardReset();
     try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    hushJuice(true);
     paint(true);
   });
 
@@ -698,7 +891,7 @@
     var k = ev.key;
     if (k === "m" || k === "M") {
       var id = game.hovered || "x";
-      if (game.buy(id, true)) { paint(true); save(false); }
+      if (game.buy(id, true)) { paint(true); save(false); punchBuy(id); }
     } else if (k === "p" || k === "P") {
       if (prestigeArmed) doPrestige();
       else openPrestigeModal();
