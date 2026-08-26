@@ -9,6 +9,7 @@
   "use strict";
 
   var LOG10E = Math.LOG10E;
+  var MAX_DLOG_PER_SEC = 2.0; // named clamp: decades of f per real second
 
   var VAR_ORDER = ["x", "y", "z", "u", "v", "w", "a"];
 
@@ -322,15 +323,15 @@
   };
 
   /** Uncapped d(log10 f) / d(real second). Use displayRate() for UI and ticks. */
-  Game.MAX_DLOG_PER_SEC = 2;
+  Game.MAX_DLOG_PER_SEC = MAX_DLOG_PER_SEC;
 
   Game.prototype.growthRate = function () {
     return this.exponentCoeff() * this.dtSpeed() * LOG10E;
   };
 
-  /** Rate the sim actually applies. */
+  /** Rate the sim actually applies (clamped decades / real second). */
   Game.prototype.displayRate = function () {
-    return Math.min(this.growthRate(), Game.MAX_DLOG_PER_SEC);
+    return Math.min(this.growthRate(), MAX_DLOG_PER_SEC);
   };
 
   Game.prototype._affordLog = function () {
@@ -537,6 +538,17 @@
     this.s.mu -= cost;
     this.s.muUp[which] += 1;
     this.emit("up", which === "y" ? "y-production lemma strengthened" : "dt lemma strengthened");
+    return true;
+  };
+
+  /** Buried optional on Upgrades. Spend ~10% of f for 0.2s of clamped production.
+   *  A tap is strictly worse than waiting 0.2s. Not a clicker. */
+  Game.prototype.advance = function () {
+    var slice = 0.045757; // log10(1/0.9) ≈ 10% of f; _spendLog bites at every fLayer
+    if (!this._spendLog(slice)) return false;
+    var push = 0.2;
+    this._applyGrowth(push);
+    this.s.t += this.dtSpeed() * push;
     return true;
   };
 
@@ -910,7 +922,7 @@
     var grant = Math.min(Math.max(0, elapsedSec), cap);
     if (grant < 1) return null;
     var rate = this.s.lastRate || this.displayRate();
-    if (rate > Game.MAX_DLOG_PER_SEC) rate = Game.MAX_DLOG_PER_SEC;
+    if (rate > MAX_DLOG_PER_SEC) rate = MAX_DLOG_PER_SEC;
     var before = { log: this.s.fLog, layer: this.s.fLayer, t: this.s.t };
     this._applyGrowth(grant);
     this.s.t += this.dtSpeed() * grant;

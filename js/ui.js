@@ -356,6 +356,10 @@
       html += '<button class="btn primary" data-up="' + u.id + '"' + (u.can && !maxed ? "" : " disabled") + ">Buy</button>";
       html += "</div>";
     });
+    html += '<div class="up-row"><div class="var-name" style="font-size:16px;font-style:normal;font-family:var(--sans);color:var(--ink-dim)">∇t</div>';
+    html += '<div class="var-info"><div class="val">Advance t</div><div class="eff">Spend ~10% of f(t) for 0.2s of production. Waiting is strictly better. Optional.</div></div>';
+    html += '<div class="var-cost"><span class="n">10%</span>of f</div><span></span>';
+    html += '<button class="btn" id="up-advance">Advance</button></div>';
     $("upgrade-table").innerHTML = html;
   }
 
@@ -741,6 +745,10 @@
   bindVarClicks($("var-table"));
 
   $("upgrade-table").addEventListener("click", function (ev) {
+    if (ev.target.id === "up-advance") {
+      if (game.advance()) { paint(true); save(false); }
+      return;
+    }
     var t = ev.target.closest("[data-up]");
     if (t) {
       game.buyUpgrade(t.getAttribute("data-up"));
