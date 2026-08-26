@@ -32,7 +32,7 @@ Files: `index.html` + `css/style.css` + `js/*.js` + bundled Liberation fonts.
 3. **y**, **z**, **u**, **v** unlock as *f* this run climbs. Each multiplies the exponent. **w** and **α** are later still: they need a Stars-shop purchase *and* high *f*.
 4. On the Upgrades tab: faster **dt**, cheaper **x**. Time is the engine — there is nothing you must click.
 5. When Δb is meaningful (progress bar on Prestige), prestige: reset *t*, *f*, and variable levels; keep **b** and **μ**. Next run is faster. Two μ lemmas unlock after the first prestige.
-6. Autobuy appears after you have prestiged once (or earlier if you buy it with stars).
+6. Autobuy (Equation tab) appears after you have prestiged once (or earlier if you buy it with stars). It buys toward the next ×10 milestone on one variable per tick, plus at most one upgrade.
 7. **Stars** come from achievements (first buy, *f* milestones, prestiges, play time, …), never from clicking. Spend them in the Stars shop: extra variables, early autobuy, a small permanent production multiplier, auto-prestige.
 8. After a few prestiges and enough **b**, **Rewrite**: reset *t*, *f*, variables, f-upgrades, and *b* (returns to 1). Gain **φ**, which multiplies the exponent. μ lemmas, stars, and theories remain.
 9. After the first rewrite, the **Theories** tab opens. Two mini-equations (Recurrence, Coupled rates) tick while active. **Publish** resets that theory and raises its τₙ. Main **τ** = (1+τ₁)(1+τ₂).

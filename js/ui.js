@@ -412,7 +412,7 @@
   /* ----- prestige / rewrite panel ----- */
   function prestigeProgress() {
     var L = game._prestigeLog();
-    return Math.max(0, Math.min(1, L / 24));
+    return Math.max(0, Math.min(1, L / 12));
   }
 
   function rewriteProgress() {
@@ -435,7 +435,9 @@
     $("p-bar").style.width = (prestigeProgress() * 100).toFixed(1) + "%";
     $("btn-prestige").disabled = !can;
     $("btn-prestige-mini").disabled = !can;
-    if (!can) {
+    if (game.s.prestiges === 0 && (game.s.vars.y || 0) === 0) {
+      $("p-hint").textContent = "Waiting for y (~1e22) makes a stronger first prestige. The button still works if you want to go now.";
+    } else if (!can) {
       var L = game._prestigeLog();
       $("p-hint").textContent = "Prestige opens as log10(f) approaches 12. Currently " + (isFinite(L) ? L.toFixed(2) : "huge") + ".";
     } else {

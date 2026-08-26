@@ -118,7 +118,7 @@
     {
       id: "earlyAutobuy",
       name: "Early autobuy",
-      desc: "Autobuy on the Variables tab before your first prestige.",
+      desc: "Autobuy on the Equation tab before your first prestige.",
       max: 1,
       cost: function () { return 3; }
     },
@@ -189,6 +189,7 @@
       muUp: { y: 0, dt: 0 },
       autobuy: false,
       autobuyAcc: 0,
+      autobuyIdx: 0,
       autoPrestige: false,
       autoPrestigeThreshold: 1,
       prestiges: 0,
@@ -461,11 +462,10 @@
     return lo;
   };
 
-  Game.prototype.buy = function (id, max) {
+  Game.prototype._buyN = function (id, n) {
     if (!this.isUnlocked(id)) return 0;
-    var n = max ? this.buyableCount(id) : (this.canBuy(id) ? 1 : 0);
+    n = Math.floor(n);
     if (n <= 0) return 0;
-    if (!max) n = 1;
     var lv = this.s.vars[id];
     var total = this._sumCost(id, lv, n);
     if (!this._spendLog(total)) {
@@ -490,6 +490,45 @@
     }
     this.checkAchievements();
     return n;
+  };
+
+  Game.prototype.buy = function (id, max) {
+    if (!this.isUnlocked(id)) return 0;
+    var n = max ? this.buyableCount(id) : (this.canBuy(id) ? 1 : 0);
+    return this._buyN(id, n);
+  };
+
+  /** Buy levels of one variable up to (not past) the next multiple of 10. */
+  Game.prototype.buyTowardMilestone = function (id) {
+    if (!this.isUnlocked(id)) return 0;
+    var lv = this.s.vars[id] || 0;
+    var toNext = 10 - (lv % 10);
+    var n = Math.min(toNext, this.buyableCount(id));
+    return this._buyN(id, n);
+  };
+
+  /** One autobuy pulse: one var toward next milestone, then at most one upgrade. */
+  Game.prototype._autobuyPulse = function () {
+    var unlocked = [];
+    var i;
+    for (i = 0; i < VAR_ORDER.length; i++) {
+      if (this.isUnlocked(VAR_ORDER[i])) unlocked.push(VAR_ORDER[i]);
+    }
+    if (unlocked.length) {
+      var start = ((this.s.autobuyIdx || 0) % unlocked.length + unlocked.length) % unlocked.length;
+      var bought = false;
+      for (i = 0; i < unlocked.length; i++) {
+        var idx = (start + i) % unlocked.length;
+        if (this.buyTowardMilestone(unlocked[idx]) > 0) {
+          this.s.autobuyIdx = (idx + 1) % unlocked.length;
+          bought = true;
+          break;
+        }
+      }
+      if (!bought) this.s.autobuyIdx = (start + 1) % unlocked.length;
+    }
+    if (this.canUpgrade("dt")) this.buyUpgrade("dt");
+    else if (this.canUpgrade("cheapX")) this.buyUpgrade("cheapX");
   };
 
   Game.prototype.buyUpgrade = function (which) {
@@ -868,10 +907,7 @@
       s.autobuyAcc = (s.autobuyAcc || 0) + realDt;
       if (s.autobuyAcc >= 0.4) {
         s.autobuyAcc = 0;
-        for (var i = 0; i < VAR_ORDER.length; i++) {
-          var id = VAR_ORDER[i];
-          if (this.isUnlocked(id)) this.buy(id, true);
-        }
+        this._autobuyPulse();
       }
     }
 

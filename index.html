@@ -54,6 +54,9 @@
             </div>
             <div class="actions">
               <button class="btn primary" id="btn-prestige-mini" disabled>Prestige</button>
+              <label class="toggle" id="autobuy-wrap" hidden>
+                <input type="checkbox" id="autobuy" /> Autobuy
+              </label>
             </div>
             <p class="ee-help">Notation: 1.23e9 = 1.23×10<sup>9</sup>. &nbsp; ee3 = 10<sup>10<sup>3</sup></sup> = 10<sup>1000</sup>.</p>
           </div>
@@ -73,9 +76,6 @@
               <h2>Variables</h2>
               <p>Each purchase divides f(t) by the cost, then growth continues from the new f.</p>
             </div>
-            <label class="toggle" id="autobuy-wrap" hidden>
-              <input type="checkbox" id="autobuy" /> Autobuy
-            </label>
           </div>
           <div id="var-table"></div>
           <p class="board-note" id="var-star-hint" hidden></p>
