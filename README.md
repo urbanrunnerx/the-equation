@@ -30,7 +30,7 @@ Files: `index.html` + `css/style.css` + `js/*.js` + bundled Liberation fonts.
 1. *f(t)* starts at 10, enough to buy **x** immediately. Spending *divides* *f* by the cost, then growth continues from the new *f*.
 2. Every 10 levels, a variable gets a stepwise bump.
 3. **y**, **z**, **u**, **v** unlock as *f* this run climbs. Each multiplies the exponent. **w** and **α** are later still: they need a Stars-shop purchase *and* high *f*.
-4. On the Upgrades tab: faster **dt**, cheaper **x**. Time is the engine — there is nothing you must click. A buried optional Advance t spends ~10% of *f* for 0.2s of production; waiting is always better.
+4. On the Upgrades tab: faster **dt**, cheaper **x**. Time is the engine — there is nothing you must click.
 5. When Δb is meaningful (progress bar on Prestige), prestige: reset *t*, *f*, and variable levels; keep **b** and **μ**. Next run is faster. Two μ lemmas unlock after the first prestige.
 6. Autobuy appears after you have prestiged once (or earlier if you buy it with stars).
 7. **Stars** come from achievements (first buy, *f* milestones, prestiges, play time, …), never from clicking. Spend them in the Stars shop: extra variables, early autobuy, a small permanent production multiplier, auto-prestige.

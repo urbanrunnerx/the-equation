@@ -541,17 +541,6 @@
     return true;
   };
 
-  /** Buried optional on Upgrades. Spend ~10% of f for 0.2s of clamped production.
-   *  A tap is strictly worse than waiting 0.2s. Not a clicker. */
-  Game.prototype.advance = function () {
-    var slice = 0.045757; // log10(1/0.9) ≈ 10% of f; _spendLog bites at every fLayer
-    if (!this._spendLog(slice)) return false;
-    var push = 0.2;
-    this._applyGrowth(push);
-    this.s.t += this.dtSpeed() * push;
-    return true;
-  };
-
   /* ---------- prestige ---------- */
 
   Game.prototype._prestigeLog = function () {
