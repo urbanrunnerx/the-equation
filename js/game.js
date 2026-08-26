@@ -177,7 +177,7 @@
     return {
       v: 2,
       t: 0,
-      fLog: 0,             // log10(f), f starts at 1
+      fLog: 1,             // log10(f), f starts at 10 so x is buyable at t=0
       fLayer: 0,
       b: 1,
       mu: 0,
@@ -259,9 +259,10 @@
     if (def.starGate && !(this.s.starShop && this.s.starShop[def.starGate] > 0)) return false;
     if (def.unlockLog === -Infinity) return true;
     var L = this.s.runMaxFLog;
-    if (this.s.maxFLayer > 0 || this.s.fLayer > 0) {
-      // ee-scale this run: treat as high enough for any log gate
-      if (this.s.fLayer > 0) return true;
+    if (this.s.fLayer > 0) {
+      var mapped = Math.pow(10, this.s.fLog);
+      if (isFinite(mapped)) L = Math.max(L, mapped);
+      else L = Math.max(L, 1e10);
     }
     return L + 1e-9 >= def.unlockLog;
   };
@@ -320,9 +321,24 @@
     return this.s.b * this.phi() * this.tau() * this.starMult() * this.product();
   };
 
-  /** d(log10 f) / d(real second) */
+  /** Uncapped d(log10 f) / d(real second). Use displayRate() for UI and ticks. */
+  Game.MAX_DLOG_PER_SEC = 2;
+
   Game.prototype.growthRate = function () {
     return this.exponentCoeff() * this.dtSpeed() * LOG10E;
+  };
+
+  /** Rate the sim actually applies. */
+  Game.prototype.displayRate = function () {
+    return Math.min(this.growthRate(), Game.MAX_DLOG_PER_SEC);
+  };
+
+  Game.prototype._affordLog = function () {
+    var s = this.s;
+    if (s.fLayer === 0) return s.fLog;
+    var log10f = Math.pow(10, s.fLog);
+    if (!isFinite(log10f)) return 1e300;
+    return log10f;
   };
 
   Game.prototype.showPhi = function () {
@@ -356,8 +372,7 @@
 
   Game.prototype.canBuy = function (id) {
     if (!this.isUnlocked(id)) return false;
-    if (this.s.fLayer > 0) return true;
-    return this.s.fLog + 1e-12 >= this.costLog(id);
+    return this._affordLog() + 1e-12 >= this.costLog(id);
   };
 
   Game.prototype.fNum = function () {
@@ -387,10 +402,26 @@
 
   Game.prototype._spendLog = function (costLog) {
     var s = this.s;
-    if (s.fLayer > 0) return true; // cost is dust
-    if (s.fLog < costLog - 1e-12) return false;
-    s.fLog -= costLog;
-    if (s.fLog < -12) s.fLog = -12; // floor near 0
+    if (s.fLayer === 0) {
+      if (s.fLog < costLog - 1e-12) return false;
+      s.fLog -= costLog;
+      if (s.fLog < -12) s.fLog = -12;
+      return true;
+    }
+    var log10f = Math.pow(10, s.fLog);
+    if (!isFinite(log10f) || log10f > 1e15) {
+      s.fLog -= 1e-8;
+      if (s.fLog < 0) s.fLog = 0;
+      return true;
+    }
+    if (log10f < costLog - 1e-12) return false;
+    log10f -= costLog;
+    if (log10f <= 1e10) {
+      s.fLayer = 0;
+      s.fLog = log10f;
+    } else {
+      s.fLog = Math.log10(log10f);
+    }
     return true;
   };
 
@@ -412,9 +443,8 @@
   };
 
   Game.prototype.buyableCount = function (id) {
-    if (!this.isUnlocked(id) || this.s.fLayer === 0 && this.s.fLog < this.costLog(id)) return 0;
-    if (this.s.fLayer > 0) return 8;
-    var budget = this.s.fLog;
+    if (!this.isUnlocked(id) || this._affordLog() < this.costLog(id)) return 0;
+    var budget = this._affordLog();
     var lv = this.s.vars[id];
     var lo = 0, hi = 1;
     while (hi < 120 && this._sumCost(id, lv, hi) <= budget) {
@@ -489,8 +519,9 @@
   };
 
   Game.prototype.canUpgrade = function (which) {
-    if (this.s.fLayer > 0) return true;
-    return this.s.fLog >= this.upgradeCostLog(which);
+    var cost = this.upgradeCostLog(which);
+    if (!isFinite(cost)) return false;
+    return this._affordLog() >= cost;
   };
 
   Game.prototype.muUpgradeCost = function (which) {
@@ -506,18 +537,6 @@
     this.s.mu -= cost;
     this.s.muUp[which] += 1;
     this.emit("up", which === "y" ? "y-production lemma strengthened" : "dt lemma strengthened");
-    return true;
-  };
-
-  /** Spend a slice of f to push t forward. Optional, not a clicker. */
-  Game.prototype.advance = function () {
-    var s = this.s;
-    if (s.fLayer === 0 && s.fLog < 0.3) return false;
-    var slice = 0.045757; // ~10% of f
-    if (s.fLayer === 0) s.fLog -= slice;
-    var push = 1.75; // seconds of real production
-    this._applyGrowth(push);
-    s.t += this.dtSpeed() * push;
     return true;
   };
 
@@ -549,7 +568,7 @@
   Game.prototype._resetRun = function () {
     var s = this.s;
     s.t = 0;
-    s.fLog = 0;
+    s.fLog = 1;
     s.fLayer = 0;
     s.vars = defaultVars();
     s.up = { dt: 0, cheapX: 0 };
@@ -816,10 +835,9 @@
 
   Game.prototype._applyGrowth = function (realDt) {
     var s = this.s;
-    var dL = this.growthRate() * realDt;
-    // One tick cannot skip decades of notation; keeps prestige μ/b sane.
-    if (s.fLayer === 0 && dL > 6) dL = 6;
-    s.lastRate = this.growthRate();
+    var rate = this.displayRate();
+    var dL = rate * realDt;
+    s.lastRate = rate;
     if (s.fLayer === 0) {
       s.fLog += dL;
       if (s.fLog > s.runMaxFLog) s.runMaxFLog = s.fLog;
@@ -832,6 +850,8 @@
       var slog = Math.pow(10, s.fLog);
       if (isFinite(slog)) {
         s.fLog = Math.log10(slog + dL);
+      } else {
+        s.fLog += 1e-9 * realDt;
       }
     }
     this._noteMax();
@@ -889,16 +909,10 @@
     var cap = 8 * 3600;
     var grant = Math.min(Math.max(0, elapsedSec), cap);
     if (grant < 1) return null;
-    var rate = this.s.lastRate || this.growthRate();
+    var rate = this.s.lastRate || this.displayRate();
+    if (rate > Game.MAX_DLOG_PER_SEC) rate = Game.MAX_DLOG_PER_SEC;
     var before = { log: this.s.fLog, layer: this.s.fLayer, t: this.s.t };
-    // Apply at last known rate (no extra buys while away)
-    if (this.s.fLayer === 0) {
-      this.s.fLog += rate * grant;
-      if (this.s.fLog > 1e10) {
-        this.s.fLayer = 1;
-        this.s.fLog = Math.log10(this.s.fLog);
-      }
-    }
+    this._applyGrowth(grant);
     this.s.t += this.dtSpeed() * grant;
     this.s.playTime += grant;
     this.s.runTime += grant;
@@ -1032,6 +1046,11 @@
       });
     }
     s.theories = mergeTheories(d.theories);
+    // Stuck brand-new saves from before f started at 10.
+    if ((s.prestiges || 0) === 0 && (s.rewrites || 0) === 0 &&
+        (s.vars.x || 0) === 0 && s.t < 1 && s.fLayer === 0 && s.fLog < 1) {
+      s.fLog = 1;
+    }
     this.s = s;
     this.checkAchievements();
     return d.lastSave || Date.now();
