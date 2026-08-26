@@ -343,11 +343,7 @@
     if (def.starGate && !(this.s.starShop && this.s.starShop[def.starGate] > 0)) return false;
     if (def.unlockLog === -Infinity) return true;
     var L = this.s.runMaxFLog;
-    if (this.s.fLayer > 0) {
-      var mapped = Math.pow(10, this.s.fLog);
-      if (isFinite(mapped)) L = Math.max(L, mapped);
-      else L = Math.max(L, 1e10);
-    }
+    if (this.s.fLayer === 0) L = Math.max(L, this.s.fLog);
     return L + 1e-9 >= def.unlockLog;
   };
 

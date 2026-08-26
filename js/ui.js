@@ -316,8 +316,8 @@
       html += "</div>";
     }
     html += "</div>";
+    html += '<div class="var-cost"><span class="n">' + (locked ? "—" : formatLog(cost)) + "</span>" + (locked ? "" : "cost") + "</div>";
     if (!locked) {
-      html += '<div class="var-cost"><span class="n">' + formatLog(cost) + "</span>cost</div>";
       html += '<button class="btn" data-buy="1" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy 1</button>";
       if (game.s.starShop && game.s.starShop.buy10 > 0) {
         html += '<button class="btn" data-buy="10" data-id="' + id + '"' + (can ? "" : " disabled") + ">Buy 10</button>";
@@ -330,13 +330,20 @@
 
   function renderVars(into, compact) {
     var ids = [];
+    var seen = {};
+    function addId(id) {
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    }
     Game.VAR_ORDER.forEach(function (id) {
-      if (game.isUnlocked(id)) ids.push(id);
+      if (game.isUnlocked(id)) addId(id);
     });
-    var nxt = game.nextLocked();
-    if (nxt) ids.push(nxt);
-    var pending = game.starGatedPending();
-    if (pending.length && ids.indexOf(pending[0]) < 0) ids.push(pending[0]);
+    addId(game.nextLocked());
+    game.starGatedPending().forEach(addId);
+    ids.sort(function (a, b) {
+      return Game.VAR_ORDER.indexOf(a) - Game.VAR_ORDER.indexOf(b);
+    });
     into.innerHTML = ids.map(function (id) { return varRow(id, compact); }).join("");
   }
 
@@ -527,7 +534,8 @@
       shopHtml += "</div></div>";
       shopHtml += '<div class="var-cost"><span class="n">' + (maxed ? "✓" : String(cost)) + "</span>" + (maxed ? "owned" : "stars") + "</div>";
       shopHtml += "<span></span>";
-      shopHtml += '<button class="btn primary" data-star="' + item.id + '"' + (can ? "" : " disabled") + ">Buy</button>";
+      if (maxed) shopHtml += '<span class="owned-check" title="owned">✓</span>';
+      else shopHtml += '<button class="btn primary" data-star="' + item.id + '"' + (can ? "" : " disabled") + ">Buy</button>";
       shopHtml += "</div>";
     });
     $("star-shop").innerHTML = shopHtml;
@@ -649,11 +657,11 @@
 
     ctx.fillStyle = "#6c665c";
     ctx.font = "10px Eq Sans, sans-serif";
-    ctx.fillText("t", padL + gw - 8, padT + gh + 16);
     ctx.save();
     ctx.translate(14, padT + gh / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     ctx.fillText("log10 f", 0, 0);
     ctx.restore();
 
@@ -667,9 +675,24 @@
     if (l1 <= l0) l1 = 1;
 
     ctx.fillStyle = "#6c665c";
-    ctx.fillText(formatJS(l1, 1), 4, padT + 10);
-    ctx.fillText("0", 4, padT + gh);
-    ctx.fillText(formatTime(t1), padL + gw - 48, padT + gh + 16);
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillText(formatTime(t1), padL + gw, padT + gh + 4);
+    ctx.textAlign = "left";
+    ctx.fillText("t", padL + 2, padT + gh + 4);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(padL, padT, gw, gh);
+    ctx.clip();
+
+    ctx.fillStyle = "#6c665c";
+    ctx.font = "10px Eq Sans, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(formatJS(l1, 1), padL + 4, padT + 4);
+    ctx.textBaseline = "bottom";
+    ctx.fillText("0", padL + 4, padT + gh - 2);
 
     ctx.beginPath();
     for (var j = 0; j < pts.length; j++) {
@@ -703,6 +726,7 @@
     ctx.closePath();
     ctx.fillStyle = grd;
     ctx.fill();
+    ctx.restore();
   }
 
   /* ----- paint ----- */

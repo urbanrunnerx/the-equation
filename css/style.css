@@ -164,7 +164,8 @@ button:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
 .tabs {
   display: flex;
   gap: 2px;
-  padding: 10px 0 8px;
+  padding: 10px 0 0;
+  border-bottom: 1px solid var(--line);
 }
 .tabs button {
   background: transparent;
@@ -175,6 +176,7 @@ button:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
   letter-spacing: 0.12em;
   text-transform: uppercase;
   border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;
 }
 .tabs button:hover { color: var(--ink); }
@@ -312,6 +314,7 @@ button:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
   display: flex;
   flex-direction: column;
   min-height: 260px;
+  overflow: hidden;
 }
 .graph-card h3 {
   font-size: 11px;
@@ -507,8 +510,8 @@ textarea#save-box {
 /* toasts */
 #toasts {
   position: fixed;
-  right: 18px;
-  top: 18px;
+  left: 18px;
+  bottom: 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -528,7 +531,7 @@ textarea#save-box {
   animation: in 0.25s ease;
 }
 .toast b { color: var(--gold); font-weight: 400; font-family: var(--serif); font-style: italic; }
-@keyframes in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* modal */
 .modal {
@@ -825,11 +828,17 @@ textarea#save-box {
   letter-spacing: 0.02em;
 }
 .var-row.locked {
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 56px 1fr auto;
   opacity: 0.7;
 }
-.var-row.locked .var-cost,
-.var-row.locked .btn { display: none; }
+.owned-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  color: var(--green);
+  font-size: 16px;
+}
 .locked-preview { opacity: 0.62; pointer-events: none; }
 .theory-teaser { margin-top: 16px; }
 #notation-sel {
