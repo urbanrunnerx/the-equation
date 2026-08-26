@@ -448,6 +448,7 @@ button:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
   padding: 10px 12px;
 }
 .p-stat .k { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); }
+.p-stat .k.greek { text-transform: none; letter-spacing: 0.08em; }
 .p-stat .v { font-family: var(--serif); font-style: italic; font-size: 22px; color: var(--gold); }
 .progress {
   height: 6px;
@@ -475,6 +476,7 @@ button:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
   border-bottom: 1px solid var(--line);
 }
 .stat-cell .k { font-size: 11px; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; }
+.stat-cell .k.greek { text-transform: none; letter-spacing: 0.08em; }
 .stat-cell .v { font-family: var(--serif); font-style: italic; font-size: 20px; margin-top: 4px; }
 .save-row { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
 textarea#save-box {

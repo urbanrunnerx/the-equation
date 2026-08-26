@@ -437,7 +437,8 @@
       ["dt", formatJS(game.dtSpeed(), 3)]
     ];
     $("stats-grid").innerHTML = cells.map(function (c) {
-      return '<div class="stat-cell"><div class="k">' + c[0] + '</div><div class="v">' + c[1] + "</div></div>";
+      var gk = /[μφατλσρΠ]/.test(c[0]) ? " greek" : "";
+      return '<div class="stat-cell"><div class="k' + gk + '">' + c[0] + '</div><div class="v">' + c[1] + "</div></div>";
     }).join("");
   }
 
